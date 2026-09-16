@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Cicd.Contracts;
 using Cicd.Contracts.Api;
 using Cicd.Core.Agents;
@@ -7,6 +8,7 @@ using Cicd.Core.Persistence;
 using Cicd.Core.Plugins;
 using Cicd.Core.PullRequests;
 using Cicd.Core.Services;
+using Cicd.Core.Users;
 using Cicd.Plugins.Sdk;
 using Cicd.Server.Security;
 using Microsoft.AspNetCore.Mvc;
@@ -20,13 +22,14 @@ public static class ApiEndpoints
     {
         var api = app.MapGroup("/api/v1");
 
-        MapProjects(api.MapGroup("/projects").WithTags("Projects").RequireAuthorization(Policies.Admin));
-        MapVcsRoots(api.MapGroup("/vcs-roots").WithTags("VCS roots").RequireAuthorization(Policies.Admin));
-        MapBuildConfigurations(api.MapGroup("/build-configurations").WithTags("Build configurations").RequireAuthorization(Policies.Admin));
+        MapProjects(api.MapGroup("/projects").WithTags("Projects"));
+        MapVcsRoots(api.MapGroup("/vcs-roots").WithTags("VCS roots"));
+        MapBuildConfigurations(api.MapGroup("/build-configurations").WithTags("Build configurations"));
         MapBuilds(api.MapGroup("/builds").WithTags("Builds"));
-        MapAgents(api.MapGroup("/agents").WithTags("Agents").RequireAuthorization(Policies.Admin));
-        MapPullRequests(api.MapGroup("/pull-requests").WithTags("Pull requests").RequireAuthorization(Policies.Admin));
+        MapAgents(api.MapGroup("/agents").WithTags("Agents"));
+        MapPullRequests(api.MapGroup("/pull-requests").WithTags("Pull requests"));
         MapPlugins(api.MapGroup("/plugins").WithTags("Plugins").RequireAuthorization(Policies.Admin));
+        MapUsers(api.MapGroup("/users").WithTags("Users").RequireAuthorization(Policies.Admin));
         MapWebhooks(api.MapGroup("/webhooks").WithTags("Webhooks"));
         return app;
     }
@@ -34,10 +37,10 @@ public static class ApiEndpoints
     private static void MapProjects(RouteGroupBuilder group)
     {
         group.MapGet("/", async (CicdDbContext db, CancellationToken ct) =>
-            await db.Projects.OrderBy(p => p.Name).Select(p => p.ToDto()).ToListAsync(ct));
+            await db.Projects.OrderBy(p => p.Name).Select(p => p.ToDto()).ToListAsync(ct)).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/{id:guid}", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
-            await db.Projects.FindAsync([id], ct) is { } project ? Results.Ok(project.ToDto()) : Results.NotFound());
+            await db.Projects.FindAsync([id], ct) is { } project ? Results.Ok(project.ToDto()) : Results.NotFound()).RequireAuthorization(Policies.Viewer);
 
         group.MapPost("/", async Task<IResult> (CreateProjectRequest request, CicdDbContext db, CancellationToken ct) =>
         {
@@ -50,19 +53,19 @@ public static class ApiEndpoints
             db.Projects.Add(project);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/v1/projects/{project.Id}", project.ToDto());
-        });
+        }).RequireAuthorization(Policies.Developer);
 
         group.MapDelete("/{id:guid}", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
-            await db.Projects.Where(p => p.Id == id).ExecuteDeleteAsync(ct) > 0 ? Results.NoContent() : Results.NotFound());
+            await db.Projects.Where(p => p.Id == id).ExecuteDeleteAsync(ct) > 0 ? Results.NoContent() : Results.NotFound()).RequireAuthorization(Policies.Developer);
     }
 
     private static void MapVcsRoots(RouteGroupBuilder group)
     {
         group.MapGet("/", async (Guid? projectId, CicdDbContext db, CancellationToken ct) =>
-            await db.VcsRoots.Where(v => projectId == null || v.ProjectId == projectId).OrderBy(v => v.Name).Select(v => v.ToDto()).ToListAsync(ct));
+            await db.VcsRoots.Where(v => projectId == null || v.ProjectId == projectId).OrderBy(v => v.Name).Select(v => v.ToDto()).ToListAsync(ct)).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/{id:guid}", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
-            await db.VcsRoots.FindAsync([id], ct) is { } root ? Results.Ok(root.ToDto()) : Results.NotFound());
+            await db.VcsRoots.FindAsync([id], ct) is { } root ? Results.Ok(root.ToDto()) : Results.NotFound()).RequireAuthorization(Policies.Viewer);
 
         group.MapPost("/", async Task<IResult> (CreateVcsRootRequest request, CicdDbContext db, IEnumerable<IVcsProvider> providers, CancellationToken ct) =>
         {
@@ -104,7 +107,7 @@ public static class ApiEndpoints
             db.VcsRoots.Add(root);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/v1/vcs-roots/{root.Id}", root.ToDto());
-        });
+        }).RequireAuthorization(Policies.Developer);
 
         group.MapPost("/{id:guid}/test", async Task<IResult> (Guid id, CicdDbContext db, IEnumerable<IVcsProvider> providers, CancellationToken ct) =>
         {
@@ -122,19 +125,19 @@ public static class ApiEndpoints
 
             var error = await provider.TestConnectionAsync(root.ToInfo(), ct);
             return Results.Ok(new { ok = error is null, message = error ?? "Connection successful." });
-        });
+        }).RequireAuthorization(Policies.Developer);
 
         group.MapDelete("/{id:guid}", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
-            await db.VcsRoots.Where(v => v.Id == id).ExecuteDeleteAsync(ct) > 0 ? Results.NoContent() : Results.NotFound());
+            await db.VcsRoots.Where(v => v.Id == id).ExecuteDeleteAsync(ct) > 0 ? Results.NoContent() : Results.NotFound()).RequireAuthorization(Policies.Developer);
     }
 
     private static void MapBuildConfigurations(RouteGroupBuilder group)
     {
         group.MapGet("/", async (Guid? projectId, CicdDbContext db, CancellationToken ct) =>
-            await db.BuildConfigurations.Where(c => projectId == null || c.ProjectId == projectId).OrderBy(c => c.Name).Select(c => c.ToDto()).ToListAsync(ct));
+            await db.BuildConfigurations.Where(c => projectId == null || c.ProjectId == projectId).OrderBy(c => c.Name).Select(c => c.ToDto()).ToListAsync(ct)).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/{id:guid}", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
-            await db.BuildConfigurations.FindAsync([id], ct) is { } configuration ? Results.Ok(configuration.ToDto()) : Results.NotFound());
+            await db.BuildConfigurations.FindAsync([id], ct) is { } configuration ? Results.Ok(configuration.ToDto()) : Results.NotFound()).RequireAuthorization(Policies.Viewer);
 
         group.MapPost("/", async Task<IResult> (UpsertBuildConfigurationRequest request, CicdDbContext db, IEnumerable<IBuildStepType> stepTypes, IEnumerable<IBuildTrigger> triggers, CancellationToken ct) =>
         {
@@ -149,7 +152,7 @@ public static class ApiEndpoints
             db.BuildConfigurations.Add(configuration);
             await db.SaveChangesAsync(ct);
             return Results.Created($"/api/v1/build-configurations/{configuration.Id}", configuration.ToDto());
-        });
+        }).RequireAuthorization(Policies.Developer);
 
         group.MapPut("/{id:guid}", async Task<IResult> (Guid id, UpsertBuildConfigurationRequest request, CicdDbContext db, IEnumerable<IBuildStepType> stepTypes, IEnumerable<IBuildTrigger> triggers, CancellationToken ct) =>
         {
@@ -171,7 +174,7 @@ public static class ApiEndpoints
             configuration.UpdatedAt = DateTimeOffset.UtcNow;
             await db.SaveChangesAsync(ct);
             return Results.Ok(configuration.ToDto());
-        });
+        }).RequireAuthorization(Policies.Developer);
 
         group.MapPost("/{id:guid}/pause", async Task<IResult> (Guid id, bool paused, CicdDbContext db, CancellationToken ct) =>
         {
@@ -184,7 +187,7 @@ public static class ApiEndpoints
             configuration.Paused = paused;
             await db.SaveChangesAsync(ct);
             return Results.Ok(configuration.ToDto());
-        });
+        }).RequireAuthorization(Policies.Developer);
 
         group.MapPost("/{id:guid}/queue", async Task<IResult> (Guid id, QueueBuildRequest? request, BuildQueueService queue, CancellationToken ct) =>
         {
@@ -198,10 +201,10 @@ public static class ApiEndpoints
             {
                 return Results.NotFound();
             }
-        });
+        }).RequireAuthorization(Policies.Developer);
 
         group.MapDelete("/{id:guid}", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
-            await db.BuildConfigurations.Where(c => c.Id == id).ExecuteDeleteAsync(ct) > 0 ? Results.NoContent() : Results.NotFound());
+            await db.BuildConfigurations.Where(c => c.Id == id).ExecuteDeleteAsync(ct) > 0 ? Results.NoContent() : Results.NotFound()).RequireAuthorization(Policies.Developer);
     }
 
     private static async Task<Dictionary<string, string[]>> ValidateAsync(UpsertBuildConfigurationRequest request, CicdDbContext db, IEnumerable<IBuildStepType> stepTypes, IEnumerable<IBuildTrigger> triggers, CancellationToken ct)
@@ -281,16 +284,16 @@ public static class ApiEndpoints
                 .OrderByDescending(b => b.QueuedAt)
                 .Take(Math.Clamp(take ?? 50, 1, 500))
                 .Select(b => b.ToDto())
-                .ToListAsync(ct)).RequireAuthorization(Policies.Admin);
+                .ToListAsync(ct)).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/queue", async (CicdDbContext db, CancellationToken ct) =>
-            await BuildQuery(db).Where(b => b.Status == BuildStatus.Queued).OrderBy(b => b.QueuedAt).Select(b => b.ToDto()).ToListAsync(ct)).RequireAuthorization(Policies.Admin);
+            await BuildQuery(db).Where(b => b.Status == BuildStatus.Queued).OrderBy(b => b.QueuedAt).Select(b => b.ToDto()).ToListAsync(ct)).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/{id:guid}", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
-            await BuildQuery(db).FirstOrDefaultAsync(b => b.Id == id, ct) is { } build ? Results.Ok(build.ToDto()) : Results.NotFound()).RequireAuthorization(Policies.Admin);
+            await BuildQuery(db).FirstOrDefaultAsync(b => b.Id == id, ct) is { } build ? Results.Ok(build.ToDto()) : Results.NotFound()).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/{id:guid}/steps", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
-            await db.Builds.Where(b => b.Id == id).Select(b => b.StepRuns).FirstOrDefaultAsync(ct) is { } steps ? Results.Ok(steps) : Results.NotFound()).RequireAuthorization(Policies.Admin);
+            await db.Builds.Where(b => b.Id == id).Select(b => b.StepRuns).FirstOrDefaultAsync(ct) is { } steps ? Results.Ok(steps) : Results.NotFound()).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/{id:guid}/log", async Task<IResult> (Guid id, long? after, int? take, CicdDbContext db, CancellationToken ct) =>
         {
@@ -307,7 +310,7 @@ public static class ApiEndpoints
                 .Select(l => new LogLine { Sequence = l.Sequence, Timestamp = l.Timestamp, Level = l.Level, StepIndex = l.StepIndex, Text = l.Text })
                 .ToListAsync(ct);
             return Results.Ok(new BuildLogDto(id, lines, lines.Count > 0 ? lines[^1].Sequence : after ?? -1, build.Status.IsFinished()));
-        }).RequireAuthorization(Policies.Admin);
+        }).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/{id:guid}/log.txt", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
         {
@@ -318,10 +321,10 @@ public static class ApiEndpoints
 
             var lines = await db.BuildLogLines.AsNoTracking().Where(l => l.BuildId == id).OrderBy(l => l.Sequence).Select(l => l.Text).ToListAsync(ct);
             return Results.Text(string.Join('\n', lines), "text/plain");
-        }).RequireAuthorization(Policies.Admin);
+        }).RequireAuthorization(Policies.Viewer);
 
         group.MapPost("/{id:guid}/cancel", async Task<IResult> (Guid id, BuildQueueService queue, CancellationToken ct) =>
-            await queue.CancelAsync(id, "api", ct) is { } build ? Results.Ok(build.ToDto()) : Results.NotFound()).RequireAuthorization(Policies.Admin);
+            await queue.CancelAsync(id, "api", ct) is { } build ? Results.Ok(build.ToDto()) : Results.NotFound()).RequireAuthorization(Policies.Developer);
 
         group.MapGet("/{id:guid}/artifacts", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
         {
@@ -331,7 +334,7 @@ public static class ApiEndpoints
             }
 
             return Results.Ok(await db.BuildArtifacts.Where(a => a.BuildId == id).OrderBy(a => a.Path).Select(a => a.ToDto()).ToListAsync(ct));
-        }).RequireAuthorization(Policies.Admin);
+        }).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/{id:guid}/artifacts/{**path}", async Task<IResult> (Guid id, string path, CicdDbContext db, ArtifactStore store, CancellationToken ct) =>
         {
@@ -343,7 +346,7 @@ public static class ApiEndpoints
 
             var stream = store.Open(artifact);
             return stream is null ? Results.NotFound() : Results.File(stream, "application/octet-stream", Path.GetFileName(artifact.Path));
-        }).RequireAuthorization(Policies.Admin);
+        }).RequireAuthorization(Policies.Viewer);
 
         // Agents publish artifacts here with the agent token.
         group.MapPost("/{id:guid}/artifacts", async Task<IResult> (Guid id, [FromQuery] string path, HttpRequest request, CicdDbContext db, ArtifactStore store, CancellationToken ct) =>
@@ -364,16 +367,16 @@ public static class ApiEndpoints
     private static void MapAgents(RouteGroupBuilder group)
     {
         group.MapGet("/", async (CicdDbContext db, AgentConnectionRegistry connections, CancellationToken ct) =>
-            (await db.Agents.OrderBy(a => a.Name).ToListAsync(ct)).Select(a => a.ToDto(connections.IsConnected(a.Id))).ToList());
+            (await db.Agents.OrderBy(a => a.Name).ToListAsync(ct)).Select(a => a.ToDto(connections.IsConnected(a.Id))).ToList()).RequireAuthorization(Policies.Viewer);
 
         group.MapGet("/{id:guid}", async Task<IResult> (Guid id, CicdDbContext db, AgentConnectionRegistry connections, CancellationToken ct) =>
-            await db.Agents.FindAsync([id], ct) is { } agent ? Results.Ok(agent.ToDto(connections.IsConnected(agent.Id))) : Results.NotFound());
+            await db.Agents.FindAsync([id], ct) is { } agent ? Results.Ok(agent.ToDto(connections.IsConnected(agent.Id))) : Results.NotFound()).RequireAuthorization(Policies.Viewer);
 
         group.MapPost("/{id:guid}/authorize", async Task<IResult> (Guid id, bool? authorized, AgentService agents, AgentConnectionRegistry connections, CancellationToken ct) =>
-            await agents.SetAuthorizedAsync(id, authorized ?? true, ct) is { } agent ? Results.Ok(agent.ToDto(connections.IsConnected(agent.Id))) : Results.NotFound());
+            await agents.SetAuthorizedAsync(id, authorized ?? true, ct) is { } agent ? Results.Ok(agent.ToDto(connections.IsConnected(agent.Id))) : Results.NotFound()).RequireAuthorization(Policies.Admin);
 
         group.MapPost("/{id:guid}/enable", async Task<IResult> (Guid id, bool? enabled, AgentService agents, AgentConnectionRegistry connections, CancellationToken ct) =>
-            await agents.SetEnabledAsync(id, enabled ?? true, ct) is { } agent ? Results.Ok(agent.ToDto(connections.IsConnected(agent.Id))) : Results.NotFound());
+            await agents.SetEnabledAsync(id, enabled ?? true, ct) is { } agent ? Results.Ok(agent.ToDto(connections.IsConnected(agent.Id))) : Results.NotFound()).RequireAuthorization(Policies.Admin);
 
         group.MapGet("/{id:guid}/compatibility/{configurationId:guid}", async Task<IResult> (Guid id, Guid configurationId, CicdDbContext db, CancellationToken ct) =>
         {
@@ -386,10 +389,10 @@ public static class ApiEndpoints
 
             var unmet = AgentMatcher.Explain(AgentMatcher.EffectiveRequirements(configuration), agent.Capabilities);
             return Results.Ok(new { compatible = unmet.Count == 0, unmet });
-        });
+        }).RequireAuthorization(Policies.Viewer);
 
         group.MapDelete("/{id:guid}", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
-            await db.Agents.Where(a => a.Id == id).ExecuteDeleteAsync(ct) > 0 ? Results.NoContent() : Results.NotFound());
+            await db.Agents.Where(a => a.Id == id).ExecuteDeleteAsync(ct) > 0 ? Results.NoContent() : Results.NotFound()).RequireAuthorization(Policies.Admin);
     }
 
     private static void MapPullRequests(RouteGroupBuilder group)
@@ -400,10 +403,10 @@ public static class ApiEndpoints
                 .Where(p => state == null || p.State == state)
                 .OrderByDescending(p => p.UpdatedAt)
                 .Select(p => p.ToDto())
-                .ToListAsync(ct));
+                .ToListAsync(ct)).RequireAuthorization(Policies.Viewer);
 
         group.MapPost("/refresh", async (string? repositoryUrl, PullRequestService service, CancellationToken ct) =>
-            new { queued = await service.RefreshAsync(repositoryUrl, ct) });
+            new { queued = await service.RefreshAsync(repositoryUrl, ct) }).RequireAuthorization(Policies.Developer);
     }
 
     private static void MapPlugins(RouteGroupBuilder group)
@@ -413,6 +416,34 @@ public static class ApiEndpoints
         group.MapGet("/triggers", (IEnumerable<IBuildTrigger> triggers) => triggers.Select(t => new { t.TypeId, t.DisplayName, parameters = t.Parameters }));
         group.MapGet("/vcs-providers", (IEnumerable<IVcsProvider> providers) => providers.Select(p => new { p.Id, p.DisplayName, properties = p.Properties }));
         group.MapGet("/pull-request-providers", (IEnumerable<IPullRequestProvider> providers) => providers.Select(p => new { p.Id, p.DisplayName }));
+    }
+
+    private static void MapUsers(RouteGroupBuilder group)
+    {
+        group.MapGet("/", async (UserService users, CancellationToken ct) =>
+            (await users.ListAsync(ct)).Select(u => u.ToDto()).ToList());
+
+        group.MapPut("/{id:guid}/role", async Task<IResult> (Guid id, SetUserRoleRequest request, UserService users, ClaimsPrincipal caller, CancellationToken ct) =>
+            await Guarded(() => users.SetRoleAsync(id, request.Role, ActingUserId(caller), ct)));
+
+        group.MapPut("/{id:guid}/disabled", async Task<IResult> (Guid id, SetUserDisabledRequest request, UserService users, ClaimsPrincipal caller, CancellationToken ct) =>
+            await Guarded(() => users.SetDisabledAsync(id, request.Disabled, ActingUserId(caller), ct)));
+    }
+
+    private static Guid? ActingUserId(ClaimsPrincipal caller) =>
+        Guid.TryParse(caller.FindFirst(LocalUserClaimsTransformation.UserIdClaim)?.Value, out var id) ? id : null;
+
+    /// <summary>Maps a missing user to 404 and a refused change (self-edit, last admin) to 409.</summary>
+    private static async Task<IResult> Guarded(Func<Task<User?>> action)
+    {
+        try
+        {
+            return await action() is { } user ? Results.Ok(user.ToDto()) : Results.NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Results.Problem(ex.Message, statusCode: StatusCodes.Status409Conflict);
+        }
     }
 
     private static void MapWebhooks(RouteGroupBuilder group)
