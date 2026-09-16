@@ -15,5 +15,6 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Cicd.Core.Tests/Cicd.Core.Tests.csproj" />
+    <Project Path="tests/Cicd.Server.Tests/Cicd.Server.Tests.csproj" />
   </Folder>
 </Solution>

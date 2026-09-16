@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using Cicd.Contracts;
 using Cicd.Core.Users;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -19,12 +20,23 @@ public sealed class AgentsOptions
 public static class Roles
 {
     public const string Agent = "agent";
+    public const string Viewer = "viewer";
+    public const string Developer = "developer";
     public const string Admin = "admin";
+
+    public static string Of(UserRole role) => role switch
+    {
+        UserRole.Admin => Admin,
+        UserRole.Developer => Developer,
+        _ => Viewer,
+    };
 }
 
 public static class Policies
 {
     public const string Agent = "Agent";
+    public const string Viewer = "Viewer";
+    public const string Developer = "Developer";
     public const string Admin = "Admin";
 }
 
@@ -90,21 +102,6 @@ public sealed class TokenAuthenticationHandler(
             System.Text.Encoding.UTF8.GetBytes(left), System.Text.Encoding.UTF8.GetBytes(right));
 }
 
-/// <summary>Succeeds for admins, or for anyone when no API token is configured (open/dev mode).</summary>
-public sealed class AdminRequirement : IAuthorizationRequirement;
-
-public sealed class AdminRequirementHandler(IOptions<SecurityOptions> security) : AuthorizationHandler<AdminRequirement>
-{
-    protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, AdminRequirement requirement)
-    {
-        if (string.IsNullOrEmpty(security.Value.ApiToken) || context.User.IsInRole(Roles.Admin))
-        {
-            context.Succeed(requirement);
-        }
-        return Task.CompletedTask;
-    }
-}
-
 public static class SecurityServiceCollectionExtensions
 {
     public static IServiceCollection AddCicdSecurity(this IServiceCollection services, IConfiguration configuration)
@@ -112,10 +109,13 @@ public static class SecurityServiceCollectionExtensions
         services.Configure<AgentsOptions>(configuration.GetSection(AgentsOptions.SectionName));
         services.AddAuthentication(TokenAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, TokenAuthenticationHandler>(TokenAuthenticationHandler.SchemeName, null);
-        services.AddSingleton<IAuthorizationHandler, AdminRequirementHandler>();
+        services.Configure<OidcOptions>(configuration.GetSection(OidcOptions.SectionName));
+        services.AddSingleton<IAuthorizationHandler, RoleRequirementHandler>();
         services.AddAuthorizationBuilder()
             .AddPolicy(Policies.Agent, policy => policy.RequireRole(Roles.Agent))
-            .AddPolicy(Policies.Admin, policy => policy.AddRequirements(new AdminRequirement()));
+            .AddPolicy(Policies.Viewer, policy => policy.AddRequirements(new RoleRequirement(UserRole.Viewer)))
+            .AddPolicy(Policies.Developer, policy => policy.AddRequirements(new RoleRequirement(UserRole.Developer)))
+            .AddPolicy(Policies.Admin, policy => policy.AddRequirements(new RoleRequirement(UserRole.Admin)));
         return services;
     }
 }
