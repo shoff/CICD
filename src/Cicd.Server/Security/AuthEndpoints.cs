@@ -16,7 +16,7 @@ public static class AuthEndpoints
             {
                 return Results.NotFound();
             }
-            var target = returnUrl is not null && returnUrl.StartsWith('/') && !returnUrl.StartsWith("//", StringComparison.Ordinal) ? returnUrl : "/";
+            var target = ReturnUrl.Sanitize(returnUrl);
             return Results.Challenge(new AuthenticationProperties { RedirectUri = target }, [OpenIdConnectDefaults.AuthenticationScheme]);
         }).ExcludeFromDescription();
 

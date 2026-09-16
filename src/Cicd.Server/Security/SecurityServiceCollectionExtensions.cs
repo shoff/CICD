@@ -129,13 +129,8 @@ public static class SecurityServiceCollectionExtensions
     private static async Task OnTicketReceivedAsync(TicketReceivedContext context)
     {
         var principal = context.Principal ?? throw new InvalidOperationException("OIDC ticket has no principal.");
-        var subject = principal.FindFirst("sub") ?? throw new InvalidOperationException("OIDC ticket has no 'sub' claim.");
-        var identity = new ExternalIdentity(
-            principal.FindFirst("iss")?.Value ?? subject.Issuer,
-            subject.Value,
-            principal.FindFirst("username")?.Value ?? principal.FindFirst("preferred_username")?.Value,
-            principal.FindFirst("email")?.Value,
-            principal.FindFirst("name")?.Value);
+        var identity = ExternalIdentityClaims.From((ClaimsIdentity)principal.Identity!)
+            ?? throw new InvalidOperationException("OIDC ticket has no 'sub' claim.");
         var users = context.HttpContext.RequestServices.GetRequiredService<UserService>();
         await users.EnsureUserAsync(identity, context.HttpContext.RequestAborted);
         context.Principal = CookiePrincipal(identity);

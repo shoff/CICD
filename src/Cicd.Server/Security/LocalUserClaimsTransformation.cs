@@ -40,17 +40,11 @@ public sealed class LocalUserClaimsTransformation(UserService users, IHttpContex
         {
             return principal;
         }
-        var subject = identity.FindFirst("sub") ?? identity.FindFirst(ClaimTypes.NameIdentifier);
-        if (subject is null)
+        var external = ExternalIdentityClaims.From(identity);
+        if (external is null)
         {
             return principal;
         }
-        var external = new ExternalIdentity(
-            identity.FindFirst("iss")?.Value ?? subject.Issuer,
-            subject.Value,
-            identity.FindFirst("username")?.Value ?? identity.FindFirst("preferred_username")?.Value,
-            identity.FindFirst("email")?.Value,
-            identity.FindFirst("name")?.Value);
         var user = await users.EnsureUserAsync(external, cancellationToken);
 
         var enriched = new ClaimsIdentity(identity.Claims, identity.AuthenticationType, ClaimTypes.Name, ClaimTypes.Role);
