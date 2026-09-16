@@ -14,6 +14,8 @@
 
 - .NET 10 (`net10.0`), SDK pinned by `global.json` (`10.0.100`, `latestFeature`). Package versions live only in `Directory.Packages.props` (central package management); new Microsoft packages use `10.0.12`.
 - No leading underscores on C# fields. Use primary constructors. Nullable enabled.
+- **Braces are required on every control statement** (`if`, `else`, `for`, `foreach`, `while`, `do`, `using`), even for a single-line body. Where a code block in this plan omits them, add them.
+- Never run `dotnet format` or any repo-wide formatter; touch only the files the task names.
 - Database naming is snake_case through `UseSnakeCaseNamingConvention()`; `CicdDbContext` in Core stays provider-neutral, `PostgresCicdDbContext` in Data owns migrations.
 - The server must keep working with no `Oidc` configuration (open mode) so `dotnet run` without IdP credentials is unchanged.
 - Migration command (from README): `cd src/Cicd.Data && DOTNET_ROLL_FORWARD=LatestMajor dotnet ef migrations add <Name> --context PostgresCicdDbContext --output-dir Migrations`.
