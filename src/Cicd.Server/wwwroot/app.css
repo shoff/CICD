@@ -29,3 +29,7 @@ input { background: var(--bg); color: var(--text); border: 1px solid var(--line)
 form.inline { display: flex; gap: 8px; margin-bottom: 16px; }
 .list { padding-left: 18px; } .error { border: 1px solid var(--fail); padding: 12px; margin-bottom: 16px; }
 details summary { cursor: pointer; padding: 6px 0; }
+.sidebar-user { margin-top: auto; padding: 12px 20px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.sidebar-user a { padding: 0; } .sidebar-user form { margin: 0; }
+button.link { background: none; color: var(--accent); padding: 0; }
+select { background: var(--bg); color: var(--text); border: 1px solid var(--line); padding: 4px 8px; border-radius: 4px; }

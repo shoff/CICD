@@ -1,4 +1,5 @@
 @page "/agents"
+@inherits SecurePage
 @implements IDisposable
 @inject IDbContextFactory<CicdDbContext> DbFactory
 @inject IServiceScopeFactory Scopes
@@ -17,8 +18,8 @@
         <tr>
             <td>@a.Name <span class="muted">@a.Version</span></td>
             <td>@(a.Connected ? "yes" : "no")</td>
-            <td><button @onclick="() => AuthorizeAsync(a.Id, !a.Authorized)">@(a.Authorized ? "Revoke" : "Authorize")</button></td>
-            <td><button @onclick="() => EnableAsync(a.Id, !a.Enabled)">@(a.Enabled ? "Disable" : "Enable")</button></td>
+            <td><AuthorizeView Policy="@Policies.Admin" Context="auth"><button @onclick="() => AuthorizeAsync(a.Id, !a.Authorized)">@(a.Authorized ? "Revoke" : "Authorize")</button></AuthorizeView></td>
+            <td><AuthorizeView Policy="@Policies.Admin" Context="auth"><button @onclick="() => EnableAsync(a.Id, !a.Enabled)">@(a.Enabled ? "Disable" : "Enable")</button></AuthorizeView></td>
             <td>@if (a.CurrentBuildId is { } id) { <a href="/builds/@id">view</a> } else { <span>-</span> }</td>
             <td>@a.LastSeenAt?.LocalDateTime.ToString("g")</td>
             <td><details><summary>@a.Capabilities.Count</summary><dl class="facts small">@foreach (var kv in a.Capabilities.OrderBy(k => k.Key)) { <dt>@kv.Key</dt><dd>@kv.Value</dd> }</dl></details></td>
@@ -44,6 +45,10 @@
 
     private async Task AuthorizeAsync(Guid id, bool authorized)
     {
+        if (!await AllowedAsync(Policies.Admin))
+        {
+            return;
+        }
         await using var scope = Scopes.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<Cicd.Core.Agents.AgentService>().SetAuthorizedAsync(id, authorized, CancellationToken.None);
         await LoadAsync();
@@ -51,6 +56,10 @@
 
     private async Task EnableAsync(Guid id, bool enabled)
     {
+        if (!await AllowedAsync(Policies.Admin))
+        {
+            return;
+        }
         await using var scope = Scopes.CreateAsyncScope();
         await scope.ServiceProvider.GetRequiredService<Cicd.Core.Agents.AgentService>().SetEnabledAsync(id, enabled, CancellationToken.None);
         await LoadAsync();

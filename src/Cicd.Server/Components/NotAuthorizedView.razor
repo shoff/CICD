@@ -1,0 +1,28 @@
+@inject NavigationManager Navigation
+<AuthorizeView>
+    <Authorized>
+        <h1>Access denied</h1>
+        <p>Your account does not have the role this page needs. Ask an administrator.</p>
+    </Authorized>
+    <NotAuthorized>
+        <p class="muted">Redirecting to sign in…</p>
+    </NotAuthorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter] private Task<AuthenticationState>? AuthState { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AuthState is null)
+        {
+            return;
+        }
+        var state = await AuthState;
+        if (state.User.Identity?.IsAuthenticated != true)
+        {
+            var returnUrl = "/" + Navigation.ToBaseRelativePath(Navigation.Uri);
+            Navigation.NavigateTo($"/login?returnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
+        }
+    }
+}

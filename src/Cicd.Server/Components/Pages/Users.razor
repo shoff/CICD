@@ -1,0 +1,75 @@
+@page "/users"
+@attribute [Authorize(Policy = Policies.Admin)]
+@inherits SecurePage
+@inject IServiceScopeFactory Scopes
+
+<PageTitle>Users - CICD</PageTitle>
+<h1>Users</h1>
+<p class="muted">Everyone who has signed in. New users start as viewers; bootstrap admins are set in configuration.</p>
+@if (error is not null)
+{
+    <div class="error">@error</div>
+}
+<table>
+    <thead><tr><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Last seen</th><th></th></tr></thead>
+    <tbody>
+    @foreach (var u in users)
+    {
+        <tr class="@(u.Disabled ? "muted" : "")">
+            <td>@u.DisplayName</td>
+            <td>@u.Username</td>
+            <td>@u.Email</td>
+            <td>
+                <select value="@u.Role" disabled="@u.Disabled" @onchange="e => SetRoleAsync(u.Id, Enum.Parse<UserRole>((string)e.Value!))">
+                    @foreach (var role in Enum.GetValues<UserRole>())
+                    {
+                        <option value="@role">@role</option>
+                    }
+                </select>
+            </td>
+            <td>@u.LastSeenAt?.LocalDateTime.ToString("g")</td>
+            <td><button @onclick="() => SetDisabledAsync(u.Id, !u.Disabled)">@(u.Disabled ? "Enable" : "Disable")</button></td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private List<UserDto> users = [];
+    private string? error;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        users = (await scope.ServiceProvider.GetRequiredService<UserService>().ListAsync(CancellationToken.None)).Select(u => u.ToDto()).ToList();
+    }
+
+    private Task SetRoleAsync(Guid id, UserRole role) =>
+        RunAsync((service, me) => service.SetRoleAsync(id, role, me, CancellationToken.None));
+
+    private Task SetDisabledAsync(Guid id, bool disabled) =>
+        RunAsync((service, me) => service.SetDisabledAsync(id, disabled, me, CancellationToken.None));
+
+    private async Task RunAsync(Func<UserService, Guid?, Task> action)
+    {
+        error = null;
+        if (!await AllowedAsync(Policies.Admin))
+        {
+            error = "Admin role required.";
+            return;
+        }
+        var me = Guid.TryParse((await AuthState).User.FindFirst(LocalUserClaimsTransformation.UserIdClaim)?.Value, out var id) ? id : (Guid?)null;
+        await using var scope = Scopes.CreateAsyncScope();
+        try
+        {
+            await action(scope.ServiceProvider.GetRequiredService<UserService>(), me);
+        }
+        catch (InvalidOperationException ex)
+        {
+            error = ex.Message;
+        }
+        await LoadAsync();
+    }
+}

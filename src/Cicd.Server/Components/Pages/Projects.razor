@@ -1,13 +1,16 @@
 @page "/projects"
+@inherits SecurePage
 @inject IDbContextFactory<CicdDbContext> DbFactory
 
 <PageTitle>Projects - CICD</PageTitle>
 <h1>Projects</h1>
 
-<form class="inline" @onsubmit="CreateAsync" @onsubmit:preventDefault>
-    <input placeholder="New project name" @bind="newName" />
-    <button type="submit" disabled="@string.IsNullOrWhiteSpace(newName)">Create</button>
-</form>
+<AuthorizeView Policy="@Policies.Developer" Context="auth">
+    <form class="inline" @onsubmit="CreateAsync" @onsubmit:preventDefault>
+        <input placeholder="New project name" @bind="newName" />
+        <button type="submit" disabled="@string.IsNullOrWhiteSpace(newName)">Create</button>
+    </form>
+</AuthorizeView>
 
 @if (projects.Count == 0)
 {
@@ -34,6 +37,10 @@
 
     private async Task CreateAsync()
     {
+        if (!await AllowedAsync(Policies.Developer))
+        {
+            return;
+        }
         if (string.IsNullOrWhiteSpace(newName)) return;
         await using var db = await DbFactory.CreateDbContextAsync();
         db.Projects.Add(new Project { Name = newName.Trim() });

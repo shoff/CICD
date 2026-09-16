@@ -1,0 +1,19 @@
+@page "/access-denied"
+@attribute [AllowAnonymous]
+<PageTitle>Access denied - CICD</PageTitle>
+<h1>Access denied</h1>
+<AuthorizeView>
+    <Authorized>
+        @if (context.User.HasClaim(LocalUserClaimsTransformation.DisabledClaim, "true"))
+        {
+            <p>Your account is disabled. Ask an administrator to enable it.</p>
+        }
+        else
+        {
+            <p>Your role does not allow this. Ask an administrator for the developer or admin role.</p>
+        }
+    </Authorized>
+    <NotAuthorized>
+        <p><a href="/login">Sign in</a> to continue.</p>
+    </NotAuthorized>
+</AuthorizeView>

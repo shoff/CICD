@@ -1,4 +1,5 @@
 @inherits LayoutComponentBase
+@inject IOptions<OidcOptions> Oidc
 <div class="shell">
     <nav class="sidebar">
         <a class="brand" href="/">CICD</a>
@@ -7,9 +8,37 @@
         <NavLink href="/builds">Builds</NavLink>
         <NavLink href="/agents">Agents</NavLink>
         <NavLink href="/plugins">Plugins</NavLink>
+        <AuthorizeView Policy="@Policies.Admin">
+            <NavLink href="/users">Users</NavLink>
+        </AuthorizeView>
         <a href="/api/docs" target="_blank" rel="noopener">API docs</a>
+        <div class="sidebar-user">
+            <AuthorizeView>
+                <Authorized>
+                    <span title="@RoleOf(context.User)">@context.User.Identity?.Name</span>
+                    <form method="post" action="/logout">
+                        <AntiforgeryToken />
+                        <button type="submit" class="link">Sign out</button>
+                    </form>
+                </Authorized>
+                <NotAuthorized>
+                    @if (Oidc.Value.IsConfigured)
+                    {
+                        <a href="/login">Sign in</a>
+                    }
+                    else
+                    {
+                        <span class="muted small">Open mode: no login configured</span>
+                    }
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
     </nav>
     <main class="content">
         @Body
     </main>
 </div>
+
+@code {
+    private static string RoleOf(ClaimsPrincipal user) => RoleRequirementHandler.Level(user)?.ToString() ?? "no role";
+}

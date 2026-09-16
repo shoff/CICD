@@ -1,4 +1,5 @@
 @page "/builds/{Id:guid}"
+@inherits SecurePage
 @implements IDisposable
 @inject IDbContextFactory<CicdDbContext> DbFactory
 @inject IServiceScopeFactory Scopes
@@ -26,7 +27,7 @@ else
     </dl>
     @if (!build.Status.IsFinished())
     {
-        <button @onclick="CancelAsync">Cancel</button>
+        <AuthorizeView Policy="@Policies.Developer" Context="auth"><button @onclick="CancelAsync">Cancel</button></AuthorizeView>
     }
 
     <h2>Steps</h2>
@@ -108,6 +109,10 @@ else
 
     private async Task CancelAsync()
     {
+        if (!await AllowedAsync(Policies.Developer))
+        {
+            return;
+        }
         await using var scope = Scopes.CreateAsyncScope();
         var queue = scope.ServiceProvider.GetRequiredService<Cicd.Core.Builds.BuildQueueService>();
         await queue.CancelAsync(Id, "ui", CancellationToken.None);

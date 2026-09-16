@@ -1,4 +1,5 @@
 @page "/projects/{Id:guid}"
+@inherits SecurePage
 @implements IDisposable
 @inject IDbContextFactory<CicdDbContext> DbFactory
 @inject IServiceScopeFactory Scopes
@@ -32,7 +33,7 @@ else
                 <td>@string.Join(", ", c.Triggers.Select(t => t.TypeId))</td>
                 <td>@(c.PullRequests.Enabled ? $"on ({c.PullRequests.TargetBranchFilter})" : "off")</td>
                 <td>@if (last is not null) { <a href="/builds/@last.Id">#@last.Number</a> <StatusBadge Status="last.Status" /> }</td>
-                <td><button @onclick="() => QueueAsync(c.Id)" disabled="@c.Paused">Run</button></td>
+                <td><AuthorizeView Policy="@Policies.Developer" Context="auth"><button @onclick="() => QueueAsync(c.Id)" disabled="@c.Paused">Run</button></AuthorizeView></td>
             </tr>
         }
         </tbody>
@@ -93,6 +94,10 @@ else
 
     private async Task QueueAsync(Guid configurationId)
     {
+        if (!await AllowedAsync(Policies.Developer))
+        {
+            return;
+        }
         await using var scope = Scopes.CreateAsyncScope();
         var queue = scope.ServiceProvider.GetRequiredService<Cicd.Core.Builds.BuildQueueService>();
         await queue.QueueAsync(new Cicd.Core.Builds.QueueBuildCommand(configurationId, TriggeredBy: "manual (ui)"), CancellationToken.None);
