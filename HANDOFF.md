@@ -115,4 +115,5 @@ Migrations: `dotnet-ef` targets net8.0; with only the .NET 10 runtime installed 
   `docs/superpowers/plans/2026-09-16-users-roles-oidc-login.md`. Smoke-tested against identity-dev discovery with a
   placeholder client; no real login yet. Local PostgreSQL runs in Docker as `cicd-postgres` (user/password/db `cicd`).
   Replaced the OIDC redirect flow with the IdP's v21 username/password login (same mechanism MAI uses) so no client
-  registration is needed.
+  registration is needed. The former `Oidc` section is gone: set `IdentityProvider:Authority`; with it empty the server
+  runs in open mode (or token-only mode when `Security:ApiToken` is set).

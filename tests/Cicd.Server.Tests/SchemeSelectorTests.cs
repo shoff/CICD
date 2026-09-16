@@ -16,34 +16,34 @@ public class SchemeSelectorTests
 
     [Fact]
     public void No_credential_is_a_cookie_request() =>
-        Assert.Equal("Cookies", SchemeSelector.Select(Request(), oidcConfigured: true));
+        Assert.Equal("Cookies", SchemeSelector.Select(Request(), providerConfigured: true));
 
     [Fact]
     public void Jwt_bearer_goes_to_the_idp_validator() =>
-        Assert.Equal("Bearer", SchemeSelector.Select(Request(r => r.Headers.Authorization = $"Bearer {Jwt}"), oidcConfigured: true));
+        Assert.Equal("Bearer", SchemeSelector.Select(Request(r => r.Headers.Authorization = $"Bearer {Jwt}"), providerConfigured: true));
 
     [Fact]
     public void Opaque_bearer_is_a_static_token() =>
-        Assert.Equal("Token", SchemeSelector.Select(Request(r => r.Headers.Authorization = "Bearer dev-token"), oidcConfigured: true));
+        Assert.Equal("Token", SchemeSelector.Select(Request(r => r.Headers.Authorization = "Bearer dev-token"), providerConfigured: true));
 
     [Fact]
     public void Api_key_header_is_a_static_token() =>
-        Assert.Equal("Token", SchemeSelector.Select(Request(r => r.Headers["X-Api-Key"] = "dev-token"), oidcConfigured: true));
+        Assert.Equal("Token", SchemeSelector.Select(Request(r => r.Headers["X-Api-Key"] = "dev-token"), providerConfigured: true));
 
     [Fact]
     public void Hub_query_token_follows_its_shape()
     {
-        Assert.Equal("Bearer", SchemeSelector.Select(Request(r => { r.Path = "/hubs/builds"; r.QueryString = new QueryString($"?access_token={Jwt}"); }), oidcConfigured: true));
-        Assert.Equal("Token", SchemeSelector.Select(Request(r => { r.Path = "/hubs/agents"; r.QueryString = new QueryString("?access_token=dev"); }), oidcConfigured: true));
+        Assert.Equal("Bearer", SchemeSelector.Select(Request(r => { r.Path = "/hubs/builds"; r.QueryString = new QueryString($"?access_token={Jwt}"); }), providerConfigured: true));
+        Assert.Equal("Token", SchemeSelector.Select(Request(r => { r.Path = "/hubs/agents"; r.QueryString = new QueryString("?access_token=dev"); }), providerConfigured: true));
     }
 
     [Fact]
     public void Query_token_outside_hubs_is_ignored() =>
-        Assert.Equal("Cookies", SchemeSelector.Select(Request(r => { r.Path = "/api/v1/builds"; r.QueryString = new QueryString("?access_token=dev"); }), oidcConfigured: true));
+        Assert.Equal("Cookies", SchemeSelector.Select(Request(r => { r.Path = "/api/v1/builds"; r.QueryString = new QueryString("?access_token=dev"); }), providerConfigured: true));
 
     [Fact]
-    public void Jwt_without_oidc_falls_back_to_the_static_token_handler() =>
-        Assert.Equal("Token", SchemeSelector.Select(Request(r => r.Headers.Authorization = $"Bearer {Jwt}"), oidcConfigured: false));
+    public void Jwt_without_a_provider_falls_back_to_the_static_token_handler() =>
+        Assert.Equal("Token", SchemeSelector.Select(Request(r => r.Headers.Authorization = $"Bearer {Jwt}"), providerConfigured: false));
 
     [Theory]
     [InlineData(Jwt, true)]

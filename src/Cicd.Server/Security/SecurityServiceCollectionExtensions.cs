@@ -17,6 +17,14 @@ public static class SecurityServiceCollectionExtensions
         services.Configure<IdentityProviderOptions>(configuration.GetSection(IdentityProviderOptions.SectionName));
         var provider = configuration.GetSection(IdentityProviderOptions.SectionName).Get<IdentityProviderOptions>() ?? new IdentityProviderOptions();
 
+        if (provider.IsConfigured && provider.RequireHttpsMetadata
+            && !provider.EffectiveLoginUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            // Fail at boot rather than on every sign-in attempt. V21LoginClient checks again at call time.
+            throw new InvalidOperationException(
+                $"IdentityProvider login URL '{provider.EffectiveLoginUrl}' must use https unless IdentityProvider:RequireHttpsMetadata is false.");
+        }
+
         services.AddHttpClient<V21LoginClient>();
         services.AddHttpContextAccessor();
         services.AddScoped<IClaimsTransformation, LocalUserClaimsTransformation>();
@@ -24,7 +32,7 @@ public static class SecurityServiceCollectionExtensions
 
         var authentication = services.AddAuthentication(SchemeSelector.SchemeName)
             .AddPolicyScheme(SchemeSelector.SchemeName, "Cookie, IdP bearer or static token", options =>
-                options.ForwardDefaultSelector = context => SchemeSelector.Select(context.Request, provider.IsConfigured))
+                options.ForwardDefaultSelector = context => SchemeSelector.Select(context.Request, providerConfigured: provider.IsConfigured))
             .AddScheme<AuthenticationSchemeOptions, TokenAuthenticationHandler>(TokenAuthenticationHandler.SchemeName, null)
             .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options => ConfigureCookie(options, isDevelopment));
 

@@ -23,6 +23,10 @@ else
             {
                 <div class="error">Username and password are required.</div>
             }
+            else if (Error == "unavailable")
+            {
+                <div class="error">The identity provider could not be reached. Try again in a moment.</div>
+            }
             <form method="post" action="/login" class="login">
                 <AntiforgeryToken />
                 <input type="hidden" name="returnUrl" value="@Target" />

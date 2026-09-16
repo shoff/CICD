@@ -11,14 +11,14 @@ public static class SchemeSelector
 {
     public const string SchemeName = "Smart";
 
-    public static string Select(HttpRequest request, bool oidcConfigured)
+    public static string Select(HttpRequest request, bool providerConfigured)
     {
         var token = PresentedToken(request);
         if (token is null)
         {
             return CookieAuthenticationDefaults.AuthenticationScheme;
         }
-        return oidcConfigured && LooksLikeJwt(token) ? JwtBearerDefaults.AuthenticationScheme : TokenAuthenticationHandler.SchemeName;
+        return providerConfigured && LooksLikeJwt(token) ? JwtBearerDefaults.AuthenticationScheme : TokenAuthenticationHandler.SchemeName;
     }
 
     /// <summary>The credential a non-browser client sent: bearer header, X-Api-Key, or the hub access_token query.</summary>

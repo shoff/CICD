@@ -3,8 +3,24 @@ using System.Text.Json;
 using Cicd.Core.Users;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 
 namespace Cicd.Server.Security;
+
+/// <summary>How a sign-in attempt ended. Only the user can fix <see cref="InvalidCredentials"/>.</summary>
+public enum LoginOutcome
+{
+    Success,
+    InvalidCredentials,
+    ProviderUnavailable,
+}
+
+/// <summary>The outcome of a v21 sign-in. <see cref="Identity"/> is set only for <see cref="LoginOutcome.Success"/>.</summary>
+public sealed record LoginResult(LoginOutcome Outcome, ExternalIdentity? Identity)
+{
+    public static LoginResult Invalid { get; } = new(LoginOutcome.InvalidCredentials, null);
+    public static LoginResult Unavailable { get; } = new(LoginOutcome.ProviderUnavailable, null);
+}
 
 /// <summary>
 /// Signs a user in with username and password against the IdP's v21 login endpoint and returns the identity carried by
@@ -16,8 +32,12 @@ public sealed class V21LoginClient(HttpClient http, IOptions<IdentityProviderOpt
     private static readonly JsonSerializerOptions PascalCase = new() { PropertyNamingPolicy = null };
     private static readonly string[] TokenProperties = ["access_token", "accessToken", "AccessToken", "token", "Token"];
 
-    /// <summary>Null when the credentials are rejected or the response carries no usable token.</summary>
-    public async Task<ExternalIdentity?> LoginAsync(string username, string password, CancellationToken cancellationToken)
+    /// <summary>
+    /// Never throws for anything the IdP does: a rejected credential is <see cref="LoginOutcome.InvalidCredentials"/>,
+    /// an unreachable provider or a response we cannot read is <see cref="LoginOutcome.ProviderUnavailable"/>. A
+    /// cancellation the caller asked for still propagates.
+    /// </summary>
+    public async Task<LoginResult> LoginAsync(string username, string password, CancellationToken cancellationToken)
     {
         var settings = options.Value;
         var url = settings.EffectiveLoginUrl;
@@ -25,46 +45,53 @@ public sealed class V21LoginClient(HttpClient http, IOptions<IdentityProviderOpt
         {
             throw new InvalidOperationException("IdentityProvider:LoginUrl must use https unless RequireHttpsMetadata is false.");
         }
-        http.Timeout = TimeSpan.FromSeconds(settings.TimeoutSeconds);
         var payload = new { UserName = username, Password = password, settings.ReturnUrl };
-        using var response = await http.PostAsJsonAsync(url, payload, PascalCase, cancellationToken);
-        if (!response.IsSuccessStatusCode)
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(TimeSpan.FromSeconds(settings.TimeoutSeconds));
+        JsonElement json;
+        try
         {
-            logger.LogWarning("Identity provider rejected sign-in for {User} with {Status}", username, (int)response.StatusCode);
-            return null;
+            using var response = await http.PostAsJsonAsync(url, payload, PascalCase, timeout.Token);
+            if (!response.IsSuccessStatusCode)
+            {
+                logger.LogWarning("Identity provider rejected sign-in for {User} with {Status}", username, (int)response.StatusCode);
+                return LoginResult.Invalid;
+            }
+            json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: timeout.Token);
         }
-        var json = await response.Content.ReadFromJsonAsync<JsonElement>(cancellationToken: cancellationToken);
+        catch (Exception ex) when (ex is HttpRequestException or JsonException
+            || (ex is OperationCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            logger.LogWarning("Identity provider could not be reached for {User}: {Reason}", username, ex.Message);
+            return LoginResult.Unavailable;
+        }
         var token = FirstString(json, TokenProperties);
         if (string.IsNullOrWhiteSpace(token))
         {
             logger.LogWarning("Identity provider sign-in response for {User} carried no access token", username);
-            return null;
+            return LoginResult.Unavailable;
         }
-        var identity = FromToken(token, settings.Authority);
+        ExternalIdentity? identity;
+        try
+        {
+            identity = FromToken(token, settings.Authority);
+        }
+        catch (Exception ex) when (ex is ArgumentException or SecurityTokenException)
+        {
+            logger.LogWarning("Identity provider access token for {User} is not a readable JWT: {Reason}", username, ex.Message);
+            return LoginResult.Unavailable;
+        }
         if (identity is null)
         {
             logger.LogWarning("Identity provider access token for {User} has no 'sub' claim", username);
+            return LoginResult.Unavailable;
         }
-        return identity;
+        return new LoginResult(LoginOutcome.Success, identity);
     }
 
     /// <summary>Reads the identity claims from an IdP JWT. Public so tests can cover the mapping without HTTP.</summary>
-    public static ExternalIdentity? FromToken(string token, string fallbackIssuer)
-    {
-        var jwt = new JsonWebToken(token);
-        string? Claim(params string[] types) => types.Select(t => jwt.Claims.FirstOrDefault(c => c.Type == t)?.Value).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
-        var subject = Claim("sub");
-        if (subject is null)
-        {
-            return null;
-        }
-        return new ExternalIdentity(
-            Claim("iss") ?? fallbackIssuer.TrimEnd('/'),
-            subject,
-            Claim("username", "unique_name", "preferred_username"),
-            Claim("email"),
-            Claim("name", "full_name"));
-    }
+    public static ExternalIdentity? FromToken(string token, string fallbackIssuer) =>
+        ExternalIdentityClaims.From(new JsonWebToken(token).Claims, fallbackIssuer);
 
     private static string? FirstString(JsonElement json, string[] properties)
     {

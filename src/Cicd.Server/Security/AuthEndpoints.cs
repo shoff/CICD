@@ -26,13 +26,17 @@ public static class AuthEndpoints
             {
                 return Results.Redirect(LoginPage("required", target));
             }
-            var identity = await login.LoginAsync(userName.Trim(), password, http.RequestAborted);
-            if (identity is null)
+            var result = await login.LoginAsync(userName.Trim(), password, http.RequestAborted);
+            if (result.Outcome == LoginOutcome.ProviderUnavailable)
+            {
+                return Results.Redirect(LoginPage("unavailable", target));
+            }
+            if (result.Identity is null)
             {
                 return Results.Redirect(LoginPage("invalid", target));
             }
-            await users.EnsureUserAsync(identity, http.RequestAborted);
-            await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, SecurityServiceCollectionExtensions.CookiePrincipal(identity));
+            await users.EnsureUserAsync(result.Identity, http.RequestAborted);
+            await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, SecurityServiceCollectionExtensions.CookiePrincipal(result.Identity));
             return Results.Redirect(target);
         }).ExcludeFromDescription();
 

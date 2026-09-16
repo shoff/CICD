@@ -57,6 +57,9 @@ ASPNETCORE_ENVIRONMENT=Development Agents__AuthToken=dev-token dotnet run --proj
 Agent__AuthToken=dev-token Agent__Name=local-1 dotnet run --project src/Cicd.Agent
 ```
 
+In the Development environment `appsettings.Development.json` points at identity-dev and requires a sign-in; pass
+`IdentityProvider__Authority=` (empty) to run in open mode as the curl examples below assume.
+
 Migrations run automatically on server start (`Server:MigrateOnStartup`). The Development environment auto-authorizes agents.
 
 ### First build, through the API
@@ -95,7 +98,7 @@ All settings are `appsettings.json` keys and can be set as environment variables
 | `IdentityProvider:LoginUrl` | The username/password endpoint. Empty derives `{Authority}/api/v21/accountv21/login`. |
 | `IdentityProvider:ReturnUrl` | Sent to the login endpoint as `ReturnUrl`; it requires a value but CICD never follows it. |
 | `IdentityProvider:ValidateAudience` / `IdentityProvider:Audience` | Audience validation for bearer JWTs. Off until the IdP has an API resource for CICD. |
-| `IdentityProvider:RequireHttpsMetadata` | Default `true`. Requires https for the login endpoint and the discovery document. |
+| `IdentityProvider:RequireHttpsMetadata` | Default `true`. Requires https for the login endpoint and the discovery document. Turning it off also allows credentials to be posted over plain http. |
 | `IdentityProvider:TimeoutSeconds` | Default `15`. Timeout for the call to the login endpoint. |
 | `Server:PublicUrl` | Used in commit status links. |
 | `Server:DataDirectory` | Where artifacts are stored. |
@@ -103,6 +106,9 @@ All settings are `appsettings.json` keys and can be set as environment variables
 | `GitHub:Token` | Default token for pull request discovery and status publishing. A VCS root property `github.token` overrides it. |
 | `GitHub:WebhookSecret` | If set, webhooks must carry a valid `X-Hub-Signature-256`. |
 | `Plugins:Directory` / `Plugins:Disabled` | Plugin root and ids to skip. |
+
+The former `Oidc` section is gone. Set `IdentityProvider:Authority`; with it empty the server runs in open mode (or
+token-only mode when `Security:ApiToken` is set).
 
 Agent: `Agent:ServerUrl`, `Agent:Name`, `Agent:AuthToken`, `Agent:WorkDirectory`, `Agent:Capabilities` (extra key/values).
 
