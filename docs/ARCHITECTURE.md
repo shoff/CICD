@@ -77,11 +77,14 @@ Two hubs. `/hubs/agents` is for agents and requires the agent token. `/hubs/buil
 `SubscribeToBuild(buildId)`. Log lines carry sequence numbers so a client can catch up with
 `GET /api/v1/builds/{id}/log?after=<seq>` and then continue live without gaps or duplicates.
 
-## Security model (current)
+## Security model
 
-- Agents: one shared bearer token (`Agents:AuthToken`) checked by `TokenAuthenticationHandler`. Agents also need
-  admin authorization per agent record.
-- API: optional single admin token (`Security:ApiToken`). When empty, `AdminRequirement` succeeds for anyone.
-- Webhooks: anonymous at the HTTP layer; the handler verifies provider signatures (GitHub HMAC).
-- The Blazor UI talks to the database directly in-process and has no login. Put it behind a reverse proxy with
-  authentication until users and roles are added.
+- **Schemes.** A policy scheme (`SchemeSelector`) forwards each request: a JWT-shaped bearer or hub `access_token` goes
+  to JwtBearer (validated against the IdP), any other bearer or `X-Api-Key` goes to `TokenAuthenticationHandler`
+  (agent token -> role `agent`, `Security:ApiToken` -> role `admin`), everything else is the session cookie issued
+  after the OIDC login (`/login` challenges, `/logout` signs out of the cookie and the IdP).
+- **Local users.** `LocalUserClaimsTransformation` runs on every cookie or JWT request, upserts the `users` row by
+  issuer and subject through `UserService`, and adds `cicd:user_id` plus a role claim. Disabled users get no role.
+- **Policies.** `Viewer` < `Developer` < `Admin` through `RoleRequirement`; `Agent` requires the agent role. In open
+  mode (no `Oidc:ClientId` and no `Security:ApiToken`) every role policy succeeds so local development needs no login.
+- Webhooks stay anonymous at the HTTP layer; handlers verify provider signatures.

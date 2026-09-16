@@ -20,6 +20,7 @@ scaffold is in place; the intended workflow from here is "TeamCity does X, add X
 | Plugin loading from `artifacts/plugins/` | done | both sides load `command-line`, `dotnet`, `git`; server loads `github` |
 | Docker images and compose | **written, never built** | no Docker daemon in the authoring sandbox |
 | GitHub pull request polling and status publishing | **written, never exercised against GitHub** | no token; webhook signature verification is unit tested |
+| Users, roles, OIDC login | code and unit tests done; **OIDC round trip not exercised** | needs an IdP client registration; see README "Users and roles" |
 
 ## Layout
 
@@ -84,8 +85,7 @@ Migrations: `dotnet-ef` targets net8.0; with only the .NET 10 runtime installed 
 ## Gaps, in the order I would tackle them
 
 1. **Build the Docker images and run `docker compose up`.** Nobody has. Expect small path or apt issues, not design issues.
-2. **Users, roles, login.** Today: one optional `Security:ApiToken` for the API, nothing for the UI. `TokenAuthenticationHandler`
-   and `AdminRequirement` in `src/Cicd.Server/Security/` are the seams. TeamCity has users, groups, roles per project.
+2. **First real login.** Register the CICD client at identity-dev, set Oidc:ClientId and Security:BootstrapAdmins, sign in, confirm the bootstrap admin lands on /users, then verify a JWT against /api/v1/builds and /hubs/builds.
 3. **Secrets at rest.** VCS root `Properties` (tokens, passwords) are plain jsonb. Redacted in API output only.
    Add a data protection based encrypter in `Mapping`/`VcsRoot` persistence, or a dedicated `secrets` table.
 4. **UI editing** of VCS roots and build configurations. The API does it; the UI only creates projects and queues builds.
@@ -111,3 +111,6 @@ Migrations: `dotnet-ef` targets net8.0; with only the .NET 10 runtime installed 
 - Authoring environment had no Docker daemon; PostgreSQL 16 was available locally and used for the end-to-end run.
 - Package versions are pinned in `Directory.Packages.props` (central package management). EF Core and
   Microsoft.Extensions 10.0.12, Npgsql provider 10.0.3, EFCore.NamingConventions 10.0.1, Scalar 2.17.4.
+- 2026-09-16: users, roles and OIDC login implemented on branch `feature/users-roles-oidc` via
+  `docs/superpowers/plans/2026-09-16-users-roles-oidc-login.md`. Smoke-tested against identity-dev discovery with a
+  placeholder client; no real login yet. Local PostgreSQL runs in Docker as `cicd-postgres` (user/password/db `cicd`).

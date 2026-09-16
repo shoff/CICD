@@ -89,7 +89,12 @@ All settings are `appsettings.json` keys and can be set as environment variables
 | `ConnectionStrings:Cicd` | PostgreSQL connection string. |
 | `Agents:AuthToken` | Shared secret agents must present. Required. |
 | `Agents:AutoAuthorize` | Authorize agents on first registration. Development only. |
-| `Security:ApiToken` | Bearer token for `/api/v1`. Empty means the API and UI are open. |
+| `Security:ApiToken` | Static bearer token that acts as an admin. Break-glass and automation. Empty disables it. |
+| `Security:BootstrapAdmins` | Emails promoted to admin on every sign-in. Set at least one before the first login. |
+| `Oidc:Authority` / `Oidc:ClientId` / `Oidc:ClientSecret` | The OpenID Connect provider. With `ClientId` empty the server runs in open mode (no login; UI and API open unless `Security:ApiToken` is set). |
+| `Oidc:Scopes` | Default `openid profile email`. |
+| `Oidc:ValidateAudience` / `Oidc:Audience` | Audience validation for bearer JWTs. Off until the IdP has an API resource for CICD. |
+| `Oidc:UsePushedAuthorization` | Default `true`. Use pushed authorization requests when the IdP advertises them (identity-dev does). Set `false` only for local smoke tests with a placeholder client; the registered CICD client must have PAR enabled at the IdP. |
 | `Server:PublicUrl` | Used in commit status links. |
 | `Server:DataDirectory` | Where artifacts are stored. |
 | `Server:*IntervalSeconds` | Dispatch, trigger poll, and pull request poll cadence. |
@@ -98,6 +103,25 @@ All settings are `appsettings.json` keys and can be set as environment variables
 | `Plugins:Directory` / `Plugins:Disabled` | Plugin root and ids to skip. |
 
 Agent: `Agent:ServerUrl`, `Agent:Name`, `Agent:AuthToken`, `Agent:WorkDirectory`, `Agent:Capabilities` (extra key/values).
+
+## Users and roles
+
+Sign-in is OpenID Connect (authorization code + PKCE) against `Oidc:Authority`. On first sign-in a user row is
+created with the `viewer` role; emails listed in `Security:BootstrapAdmins` become `admin`. Roles are global:
+
+| Role | Can |
+| --- | --- |
+| viewer | read everything: builds, logs, artifacts, projects, agents |
+| developer | viewer plus queue and cancel builds, create and edit projects, VCS roots and configurations |
+| admin | developer plus authorize and delete agents, manage users, list plugins |
+
+Admins change roles on `/users` or with `PUT /api/v1/users/{id}/role`. Changes apply on the next request.
+API clients send an IdP access token as `Authorization: Bearer <jwt>`; the same local user and role apply.
+`Security:ApiToken` is a static admin credential for automation. Agents use `Agents:AuthToken` only.
+
+Register a client at the IdP with redirect URI `<Server:PublicUrl>/signin-oidc` (and `http://localhost:5000/signin-oidc`
+for development), post-logout redirect `<Server:PublicUrl>/signout-callback-oidc`, and scopes `openid profile email`.
+Sign-out does not currently send an `id_token_hint`, so the IdP may show a confirmation page before returning to CICD.
 
 ## Pull requests
 
@@ -111,7 +135,7 @@ immediately instead of waiting for the poll.
 
 This is the scaffold, built so features can be added one at a time. Known gaps, in rough priority order:
 
-- **Users, roles, login.** There is a single admin API token and nothing else. The UI has no login.
+- **Per-project roles, groups, personal access tokens.** Roles are global for now.
 - **Secrets.** VCS root properties (tokens, passwords) are stored in plain jsonb. They are redacted in API responses but not encrypted at rest.
 - **Build log storage.** Lines go into PostgreSQL. Fine for a team, wrong for very large logs; TeamCity uses files.
 - **Agent pools, build chains and snapshot dependencies, artifact dependencies, scheduled triggers, build history cleanup, notifications (email, Slack), test result parsing, code coverage, Windows agents (untested), Kubernetes agent autoscaling.**
