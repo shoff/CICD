@@ -54,12 +54,12 @@ if (string.IsNullOrEmpty(builder.Configuration["Agents:AuthToken"]) || builder.C
 {
     app.Logger.LogWarning("Agents:AuthToken is unset or still the default. Set a real secret before exposing this server.");
 }
-var oidcOptions = app.Services.GetRequiredService<IOptions<OidcOptions>>().Value;
-if (!oidcOptions.IsConfigured)
+var identityOptions = app.Services.GetRequiredService<IOptions<IdentityProviderOptions>>().Value;
+if (!identityOptions.IsConfigured)
 {
     app.Logger.LogWarning(string.IsNullOrEmpty(builder.Configuration["Security:ApiToken"])
-        ? "Oidc is not configured and Security:ApiToken is empty: the UI and API are open."
-        : "Oidc is not configured: the UI and API accept only the static Security:ApiToken.");
+        ? "IdentityProvider:Authority is not configured and Security:ApiToken is empty: the UI and API are open."
+        : "IdentityProvider:Authority is not configured: the UI and API accept only the static Security:ApiToken.");
 }
 
 if (!app.Environment.IsDevelopment())

@@ -2,10 +2,6 @@
 @attribute [AllowAnonymous]
 <PageTitle>Access denied - CICD</PageTitle>
 <h1>Access denied</h1>
-@if (Reason == "login-failed")
-{
-    <p class="error">Sign-in failed. Check the server log for the identity provider's error.</p>
-}
 <AuthorizeView>
     <Authorized>
         @if (context.User.HasClaim(LocalUserClaimsTransformation.DisabledClaim, "true"))
@@ -21,8 +17,3 @@
         <p><a href="/login">Sign in</a> to continue.</p>
     </NotAuthorized>
 </AuthorizeView>
-
-@code {
-    [SupplyParameterFromQuery]
-    public string? Reason { get; set; }
-}

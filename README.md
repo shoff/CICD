@@ -91,10 +91,12 @@ All settings are `appsettings.json` keys and can be set as environment variables
 | `Agents:AutoAuthorize` | Authorize agents on first registration. Development only. |
 | `Security:ApiToken` | Static bearer token that acts as an admin. Break-glass and automation. Empty disables it. |
 | `Security:BootstrapAdmins` | Emails promoted to admin on every sign-in. Set at least one before the first login. |
-| `Oidc:Authority` / `Oidc:ClientId` / `Oidc:ClientSecret` | The OpenID Connect provider. With `ClientId` empty the server runs in open mode (no login; UI and API open unless `Security:ApiToken` is set). |
-| `Oidc:Scopes` | Default `openid profile email`. |
-| `Oidc:ValidateAudience` / `Oidc:Audience` | Audience validation for bearer JWTs. Off until the IdP has an API resource for CICD. |
-| `Oidc:UsePushedAuthorization` | Default `true`. Use pushed authorization requests when the IdP advertises them (identity-dev does). Set `false` only for local smoke tests with a placeholder client; the registered CICD client must have PAR enabled at the IdP. |
+| `IdentityProvider:Authority` | Issuer base URL of the company identity provider. Empty runs the server in open mode (no login; UI and API open unless `Security:ApiToken` is set). |
+| `IdentityProvider:LoginUrl` | The username/password endpoint. Empty derives `{Authority}/api/v21/accountv21/login`. |
+| `IdentityProvider:ReturnUrl` | Sent to the login endpoint as `ReturnUrl`; it requires a value but CICD never follows it. |
+| `IdentityProvider:ValidateAudience` / `IdentityProvider:Audience` | Audience validation for bearer JWTs. Off until the IdP has an API resource for CICD. |
+| `IdentityProvider:RequireHttpsMetadata` | Default `true`. Requires https for the login endpoint and the discovery document. |
+| `IdentityProvider:TimeoutSeconds` | Default `15`. Timeout for the call to the login endpoint. |
 | `Server:PublicUrl` | Used in commit status links. |
 | `Server:DataDirectory` | Where artifacts are stored. |
 | `Server:*IntervalSeconds` | Dispatch, trigger poll, and pull request poll cadence. |
@@ -106,7 +108,10 @@ Agent: `Agent:ServerUrl`, `Agent:Name`, `Agent:AuthToken`, `Agent:WorkDirectory`
 
 ## Users and roles
 
-Sign-in is OpenID Connect (authorization code + PKCE) against `Oidc:Authority`. On first sign-in a user row is
+Sign-in is a username and password form at `/login` that posts the credentials to the identity provider's v21 login
+endpoint (`IdentityProvider:LoginUrl`, by default `{Authority}/api/v21/accountv21/login`), so CICD needs no client
+registration at the IdP. The access token the endpoint returns is read for `sub`, `name`, `unique_name`/`username` and
+`email` and then discarded; the browser session is CICD's own 8-hour sliding cookie. On first sign-in a user row is
 created with the `viewer` role; emails listed in `Security:BootstrapAdmins` become `admin`. Roles are global:
 
 | Role | Can |
@@ -118,17 +123,12 @@ created with the `viewer` role; emails listed in `Security:BootstrapAdmins` beco
 Admins change roles on `/users` or with `PUT /api/v1/users/{id}/role`. Changes apply on the next request.
 API clients send an IdP access token as `Authorization: Bearer <jwt>`; the same local user and role apply.
 `Security:ApiToken` is a static admin credential for automation. Agents use `Agents:AuthToken` only.
-Until an API resource for CICD exists at the IdP and `Oidc:ValidateAudience` is on, any access token identity-dev
+Until an API resource for CICD exists at the IdP and `IdentityProvider:ValidateAudience` is on, any access token identity-dev
 issued to any application authenticates to CICD as that user. Enable audience validation as soon as the resource
 is registered.
 
-Behind a TLS-terminating proxy set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` on the server so the OIDC
-`redirect_uri` and cookies use the public `https` scheme. Outside the Development environment the session,
-correlation and nonce cookies are always marked `Secure`.
-
-Register a client at the IdP with redirect URI `<Server:PublicUrl>/signin-oidc` (and `http://localhost:5000/signin-oidc`
-for development), post-logout redirect `<Server:PublicUrl>/signout-callback-oidc`, and scopes `openid profile email`.
-Sign-out does not currently send an `id_token_hint`, so the IdP may show a confirmation page before returning to CICD.
+Behind a TLS-terminating proxy set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` on the server so cookies use the
+public `https` scheme. Outside the Development environment the session cookie is always marked `Secure`.
 
 ## Pull requests
 

@@ -1,5 +1,5 @@
 @inherits LayoutComponentBase
-@inject IOptions<OidcOptions> Oidc
+@inject IOptions<IdentityProviderOptions> Identity
 <div class="shell">
     <nav class="sidebar">
         <a class="brand" href="/">CICD</a>
@@ -22,7 +22,7 @@
                     </form>
                 </Authorized>
                 <NotAuthorized>
-                    @if (Oidc.Value.IsConfigured)
+                    @if (Identity.Value.IsConfigured)
                     {
                         <a href="/login">Sign in</a>
                     }

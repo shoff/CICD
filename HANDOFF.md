@@ -20,7 +20,7 @@ scaffold is in place; the intended workflow from here is "TeamCity does X, add X
 | Plugin loading from `artifacts/plugins/` | done | both sides load `command-line`, `dotnet`, `git`; server loads `github` |
 | Docker images and compose | **written, never built** | no Docker daemon in the authoring sandbox |
 | GitHub pull request polling and status publishing | **written, never exercised against GitHub** | no token; webhook signature verification is unit tested |
-| Users, roles, OIDC login | code and unit tests done; **OIDC round trip not exercised** | needs an IdP client registration; see README "Users and roles" |
+| Users, roles, v21 login | code, unit tests and curl smoke done; **first real sign-in pending** | run in Development and sign in at /login |
 
 ## Layout
 
@@ -85,7 +85,7 @@ Migrations: `dotnet-ef` targets net8.0; with only the .NET 10 runtime installed 
 ## Gaps, in the order I would tackle them
 
 1. **Build the Docker images and run `docker compose up`.** Nobody has. Expect small path or apt issues, not design issues.
-2. **First real login.** Register the CICD client at identity-dev, set Oidc:ClientId and Security:BootstrapAdmins, sign in, confirm the bootstrap admin lands on /users, then verify a JWT against /api/v1/builds and /hubs/builds, then register an API resource for CICD at the IdP and turn on `Oidc:ValidateAudience` (until then any identity-dev token authenticates); also check the access token `typ` header at first login before considering `TokenValidationParameters.ValidTypes`.
+2. **First real sign-in.** `dotnet run` in Development (appsettings.Development.json points at identity-dev and bootstraps shoff@manageamerica.com as admin), sign in at /login, confirm /users shows the admin, then verify an IdP access token against /api/v1/builds and /hubs/builds, and register an API resource + enable `IdentityProvider:ValidateAudience`.
 3. **Secrets at rest.** VCS root `Properties` (tokens, passwords) are plain jsonb. Redacted in API output only.
    Add a data protection based encrypter in `Mapping`/`VcsRoot` persistence, or a dedicated `secrets` table.
 4. **UI editing** of VCS roots and build configurations. The API does it; the UI only creates projects and queues builds.
@@ -114,3 +114,5 @@ Migrations: `dotnet-ef` targets net8.0; with only the .NET 10 runtime installed 
 - 2026-09-16: users, roles and OIDC login implemented on branch `feature/users-roles-oidc` via
   `docs/superpowers/plans/2026-09-16-users-roles-oidc-login.md`. Smoke-tested against identity-dev discovery with a
   placeholder client; no real login yet. Local PostgreSQL runs in Docker as `cicd-postgres` (user/password/db `cicd`).
+  Replaced the OIDC redirect flow with the IdP's v21 username/password login (same mechanism MAI uses) so no client
+  registration is needed.

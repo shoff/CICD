@@ -9,8 +9,8 @@ namespace Cicd.Server.Tests;
 
 public class RoleRequirementHandlerTests
 {
-    private static RoleRequirementHandler Handler(bool oidcConfigured, string apiToken = "") =>
-        new(Options.Create(new OidcOptions { Authority = oidcConfigured ? "https://idp" : "", ClientId = oidcConfigured ? "cicd" : "" }),
+    private static RoleRequirementHandler Handler(bool configured, string apiToken = "") =>
+        new(Options.Create(new IdentityProviderOptions { Authority = configured ? "https://idp" : "" }),
             Options.Create(new SecurityOptions { ApiToken = apiToken }));
 
     private static ClaimsPrincipal UserWith(params string[] roles) =>
@@ -37,24 +37,24 @@ public class RoleRequirementHandlerTests
     [InlineData("admin", UserRole.Admin, true)]
     [InlineData("agent", UserRole.Viewer, false)]
     public async Task Role_ladder(string role, UserRole minimum, bool expected) =>
-        Assert.Equal(expected, await Passes(Handler(oidcConfigured: true), minimum, UserWith(role)));
+        Assert.Equal(expected, await Passes(Handler(configured: true), minimum, UserWith(role)));
 
     [Fact]
     public async Task Anonymous_and_roleless_users_fail_when_configured()
     {
-        var handler = Handler(oidcConfigured: true);
+        var handler = Handler(configured: true);
         Assert.False(await Passes(handler, UserRole.Viewer, Anonymous));
         Assert.False(await Passes(handler, UserRole.Viewer, UserWith()));
     }
 
     [Fact]
     public async Task Open_mode_admits_anyone() =>
-        Assert.True(await Passes(Handler(oidcConfigured: false), UserRole.Admin, Anonymous));
+        Assert.True(await Passes(Handler(configured: false), UserRole.Admin, Anonymous));
 
     [Fact]
     public async Task Api_token_alone_closes_open_mode()
     {
-        var handler = Handler(oidcConfigured: false, apiToken: "secret");
+        var handler = Handler(configured: false, apiToken: "secret");
         Assert.False(handler.OpenMode);
         Assert.False(await Passes(handler, UserRole.Viewer, Anonymous));
         Assert.True(await Passes(handler, UserRole.Admin, UserWith("admin")));

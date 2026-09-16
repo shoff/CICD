@@ -13,12 +13,12 @@ public sealed class RoleRequirement(UserRole minimum) : IAuthorizationRequiremen
 }
 
 /// <summary>
-/// Succeeds when the principal's highest role meets the minimum. Also succeeds for everyone in open mode (OIDC not
-/// configured and no Security:ApiToken), which keeps the pre-login local development behavior.
+/// Succeeds when the principal's highest role meets the minimum. Also succeeds for everyone in open mode (no identity
+/// provider configured and no Security:ApiToken), which keeps the pre-login local development behavior.
 /// </summary>
-public sealed class RoleRequirementHandler(IOptions<OidcOptions> oidc, IOptions<SecurityOptions> security) : AuthorizationHandler<RoleRequirement>
+public sealed class RoleRequirementHandler(IOptions<IdentityProviderOptions> provider, IOptions<SecurityOptions> security) : AuthorizationHandler<RoleRequirement>
 {
-    public bool OpenMode => !oidc.Value.IsConfigured && string.IsNullOrEmpty(security.Value.ApiToken);
+    public bool OpenMode => !provider.Value.IsConfigured && string.IsNullOrEmpty(security.Value.ApiToken);
 
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, RoleRequirement requirement)
     {

@@ -33,3 +33,4 @@ details summary { cursor: pointer; padding: 6px 0; }
 .sidebar-user a { padding: 0; } .sidebar-user form { margin: 0; }
 button.link { background: none; color: var(--accent); padding: 0; }
 select { background: var(--bg); color: var(--text); border: 1px solid var(--line); padding: 4px 8px; border-radius: 4px; }
+form.login { display: flex; flex-direction: column; gap: 12px; max-width: 320px; } form.login label { display: flex; flex-direction: column; gap: 4px; }

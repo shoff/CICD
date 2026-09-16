@@ -82,9 +82,11 @@ Two hubs. `/hubs/agents` is for agents and requires the agent token. `/hubs/buil
 - **Schemes.** A policy scheme (`SchemeSelector`) forwards each request: a JWT-shaped bearer or hub `access_token` goes
   to JwtBearer (validated against the IdP), any other bearer or `X-Api-Key` goes to `TokenAuthenticationHandler`
   (agent token -> role `agent`, `Security:ApiToken` -> role `admin`), everything else is the session cookie issued
-  after the OIDC login (`/login` challenges, `/logout` signs out of the cookie and the IdP).
+  by the v21 login (`GET /login` renders the form, `POST /login` posts the credentials to the IdP's
+  `api/v21/accountv21/login`, reads the identity claims out of the access token it returns and signs the cookie in;
+  `/logout` clears the cookie).
 - **Local users.** `LocalUserClaimsTransformation` runs on every cookie or JWT request, upserts the `users` row by
   issuer and subject through `UserService`, and adds `cicd:user_id` plus a role claim. Disabled users get no role.
 - **Policies.** `Viewer` < `Developer` < `Admin` through `RoleRequirement`; `Agent` requires the agent role. In open
-  mode (no `Oidc:ClientId` and no `Security:ApiToken`) every role policy succeeds so local development needs no login.
+  mode (no `IdentityProvider:Authority` and no `Security:ApiToken`) every role policy succeeds so local development needs no login.
 - Webhooks stay anonymous at the HTTP layer; handlers verify provider signatures.
