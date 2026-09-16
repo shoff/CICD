@@ -9,3 +9,6 @@ data/
 *.swp
 TestResults/
 .env
+
+# Superpowers scratch workspace
+.superpowers/
