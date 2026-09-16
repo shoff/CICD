@@ -12,6 +12,8 @@ public sealed class OidcOptions
     public bool ValidateAudience { get; set; }
     public string Audience { get; set; } = "";
     public bool RequireHttpsMetadata { get; set; } = true;
+    /// <summary>Use pushed authorization requests when the IdP advertises them. Set false only for local smoke tests with a placeholder client.</summary>
+    public bool UsePushedAuthorization { get; set; } = true;
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Authority) && !string.IsNullOrWhiteSpace(ClientId);
 }

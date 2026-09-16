@@ -3,7 +3,6 @@ using System.Text.Encodings.Web;
 using Cicd.Contracts;
 using Cicd.Core.Users;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 
 namespace Cicd.Server.Security;
@@ -84,22 +83,4 @@ public sealed class TokenAuthenticationHandler(
     private static bool FixedTimeEquals(string left, string right) =>
         System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
             System.Text.Encoding.UTF8.GetBytes(left), System.Text.Encoding.UTF8.GetBytes(right));
-}
-
-public static class SecurityServiceCollectionExtensions
-{
-    public static IServiceCollection AddCicdSecurity(this IServiceCollection services, IConfiguration configuration)
-    {
-        services.Configure<AgentsOptions>(configuration.GetSection(AgentsOptions.SectionName));
-        services.AddAuthentication(TokenAuthenticationHandler.SchemeName)
-            .AddScheme<AuthenticationSchemeOptions, TokenAuthenticationHandler>(TokenAuthenticationHandler.SchemeName, null);
-        services.Configure<OidcOptions>(configuration.GetSection(OidcOptions.SectionName));
-        services.AddSingleton<IAuthorizationHandler, RoleRequirementHandler>();
-        services.AddAuthorizationBuilder()
-            .AddPolicy(Policies.Agent, policy => policy.RequireRole(Roles.Agent))
-            .AddPolicy(Policies.Viewer, policy => policy.AddRequirements(new RoleRequirement(UserRole.Viewer)))
-            .AddPolicy(Policies.Developer, policy => policy.AddRequirements(new RoleRequirement(UserRole.Developer)))
-            .AddPolicy(Policies.Admin, policy => policy.AddRequirements(new RoleRequirement(UserRole.Admin)));
-        return services;
-    }
 }

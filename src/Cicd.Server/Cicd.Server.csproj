@@ -8,6 +8,7 @@
     <ProjectReference Include="../Cicd.Plugins.Sdk/Cicd.Plugins.Sdk.csproj" />
     <ProjectReference Include="../Cicd.Core/Cicd.Core.csproj" />
     <ProjectReference Include="../Cicd.Data/Cicd.Data.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
     <PackageReference Include="Scalar.AspNetCore" />

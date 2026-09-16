@@ -36,6 +36,7 @@ builder.Services.AddSignalR(o => o.MaximumReceiveMessageSize = 4 * 1024 * 1024)
 builder.Services.ConfigureHttpJsonOptions(o => o.SerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter()));
 builder.Services.AddOpenApi("v1");
 builder.Services.AddRazorComponents().AddInteractiveServerComponents();
+builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("postgres");
 
 var app = builder.Build();
@@ -53,9 +54,12 @@ if (string.IsNullOrEmpty(builder.Configuration["Agents:AuthToken"]) || builder.C
 {
     app.Logger.LogWarning("Agents:AuthToken is unset or still the default. Set a real secret before exposing this server.");
 }
-if (string.IsNullOrEmpty(builder.Configuration["Security:ApiToken"]))
+var oidcOptions = app.Services.GetRequiredService<IOptions<OidcOptions>>().Value;
+if (!oidcOptions.IsConfigured)
 {
-    app.Logger.LogWarning("Security:ApiToken is empty: the REST API and UI are unauthenticated.");
+    app.Logger.LogWarning(string.IsNullOrEmpty(builder.Configuration["Security:ApiToken"])
+        ? "Oidc is not configured and Security:ApiToken is empty: the UI and API are open."
+        : "Oidc is not configured: the UI and API accept only the static Security:ApiToken.");
 }
 
 if (!app.Environment.IsDevelopment())
@@ -71,9 +75,10 @@ app.MapOpenApi();
 app.MapScalarApiReference("/api/docs", o => o.WithTitle("CICD API").WithOpenApiRoutePattern("/openapi/{documentName}.json"));
 app.MapHealthChecks("/health");
 app.MapCicdApi();
+app.MapCicdAuth();
 app.MapHub<AgentHub>("/hubs/agents");
-app.MapHub<BuildHub>("/hubs/builds");
-app.MapRazorComponents<App>().AddInteractiveServerRenderMode();
+app.MapHub<BuildHub>("/hubs/builds").RequireAuthorization(Policies.Viewer);
+app.MapRazorComponents<App>().AddInteractiveServerRenderMode().RequireAuthorization(Policies.Viewer);
 
 app.Run();
 
