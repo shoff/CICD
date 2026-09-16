@@ -24,7 +24,7 @@ stay.
 
 ### Schemes
 
-`AddCicdSecurity` registers four schemes:
+`AddCicdSecurity` registers five schemes:
 
 | Scheme | Handler | Used when |
 | --- | --- | --- |
