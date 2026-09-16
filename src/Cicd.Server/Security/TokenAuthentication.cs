@@ -79,23 +79,7 @@ public sealed class TokenAuthenticationHandler(
         return Task.FromResult(AuthenticateResult.Success(new AuthenticationTicket(new ClaimsPrincipal(identity), SchemeName)));
     }
 
-    private string? ExtractToken()
-    {
-        var header = Request.Headers.Authorization.ToString();
-        if (header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
-        {
-            return header["Bearer ".Length..].Trim();
-        }
-        if (Request.Headers.TryGetValue("X-Api-Key", out var apiKey))
-        {
-            return apiKey.ToString();
-        }
-        if (Request.Path.StartsWithSegments("/hubs") && Request.Query.TryGetValue("access_token", out var queryToken))
-        {
-            return queryToken.ToString();
-        }
-        return null;
-    }
+    private string? ExtractToken() => SchemeSelector.PresentedToken(Request);
 
     private static bool FixedTimeEquals(string left, string right) =>
         System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
