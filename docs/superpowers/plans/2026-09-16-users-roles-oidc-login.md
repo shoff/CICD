@@ -773,6 +773,8 @@ public sealed class OidcOptions
     public bool ValidateAudience { get; set; }
     public string Audience { get; set; } = "";
     public bool RequireHttpsMetadata { get; set; } = true;
+    /// <summary>Use pushed authorization requests when the IdP advertises them. Set false only for local smoke tests with a placeholder client.</summary>
+    public bool UsePushedAuthorization { get; set; } = true;
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Authority) && !string.IsNullOrWhiteSpace(ClientId);
 }
@@ -1392,6 +1394,10 @@ public static class SecurityServiceCollectionExtensions
         // Query response mode plus Lax cookies keeps the round trip working over plain http://localhost.
         options.CorrelationCookie.SameSite = SameSiteMode.Lax;
         options.NonceCookie.SameSite = SameSiteMode.Lax;
+        if (!oidc.UsePushedAuthorization)
+        {
+            options.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
+        }
         options.Events.OnTicketReceived = OnTicketReceivedAsync;
     }
 
@@ -1511,7 +1517,8 @@ In `src/Cicd.Server/appsettings.json`, replace the `"Security"` object with:
     "Scopes": "openid profile email",
     "ValidateAudience": false,
     "Audience": "",
-    "RequireHttpsMetadata": true
+    "RequireHttpsMetadata": true,
+  "UsePushedAuthorization": true
   },
 ```
 
@@ -1526,7 +1533,7 @@ Run (from repo root; the `cicd-postgres` container must be running):
 
 ```bash
 LOG=/tmp/cicd-open.log
-ASPNETCORE_ENVIRONMENT=Development Agents__AuthToken=dev dotnet run --project src/Cicd.Server --no-build > $LOG 2>&1 &
+ASPNETCORE_ENVIRONMENT=Development DOTNET_ENVIRONMENT=Development Agents__AuthToken=dev dotnet run --project src/Cicd.Server --no-build > $LOG 2>&1 &
 PID=$!; for i in $(seq 1 45); do grep -q "Now listening" $LOG && break; sleep 1; done
 curl -s -o /dev/null -w 'home %{http_code}\n' http://localhost:5000/
 curl -s -o /dev/null -w 'login %{http_code}\n' http://localhost:5000/login
@@ -1541,7 +1548,7 @@ Expected: `home 200`, `login 404`, `builds 200`, and `1` warning line.
 
 ```bash
 LOG=/tmp/cicd-oidc.log
-ASPNETCORE_ENVIRONMENT=Development Agents__AuthToken=dev Security__ApiToken=admin-dev Oidc__ClientId=smoke dotnet run --project src/Cicd.Server --no-build > $LOG 2>&1 &
+ASPNETCORE_ENVIRONMENT=Development DOTNET_ENVIRONMENT=Development Agents__AuthToken=dev Security__ApiToken=admin-dev Oidc__ClientId=smoke Oidc__UsePushedAuthorization=false dotnet run --project src/Cicd.Server --no-build > $LOG 2>&1 &
 PID=$!; for i in $(seq 1 45); do grep -q "Now listening" $LOG && break; sleep 1; done
 curl -s -o /dev/null -w 'home %{http_code} %{redirect_url}\n' http://localhost:5000/
 curl -s -o /dev/null -w 'login %{http_code} %{redirect_url}\n' 'http://localhost:5000/login?returnUrl=/builds'
@@ -1551,7 +1558,7 @@ curl -s -o /dev/null -w 'builds jwt %{http_code}\n' -H 'Authorization: Bearer ey
 kill $PID; wait $PID 2>/dev/null
 ```
 
-Expected: `home 302 http://localhost:5000/login?ReturnUrl=%2F`; `login 302` with a redirect URL starting `https://identity-dev.manageamerica.com/connect/authorize?client_id=smoke` and containing `code_challenge_method=S256` and `response_mode=query`; `builds anon 401`; `builds token 200`; `builds jwt 401` (signature cannot validate).
+Expected: `home 302 http://localhost:5000/login?ReturnUrl=%2F`; `login 302` with a redirect URL starting `https://identity-dev.manageamerica.com/connect/authorize?client_id=smoke` and containing `code_challenge_method=S256` (the handler does not emit `response_mode` for query mode); `builds anon 401`; `builds token 200`; `builds jwt 401` (signature cannot validate).
 
 - [ ] **Step 8: Commit**
 
