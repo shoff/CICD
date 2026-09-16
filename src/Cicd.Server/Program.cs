@@ -25,7 +25,7 @@ using (var startupLoggers = LoggerFactory.Create(l => l.AddSimpleConsole()))
 
 builder.Services.AddCicdPostgres(connectionString);
 builder.Services.AddCicdCore(builder.Configuration);
-builder.Services.AddCicdSecurity(builder.Configuration);
+builder.Services.AddCicdSecurity(builder.Configuration, builder.Environment.IsDevelopment());
 
 builder.Services.AddSingleton<BuildEventStream>();
 builder.Services.AddSingleton<IBuildEventPublisher, SignalRBuildEventPublisher>();

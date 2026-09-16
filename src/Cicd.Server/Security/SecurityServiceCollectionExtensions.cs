@@ -6,13 +6,14 @@ using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.IdentityModel.Protocols.OpenIdConnect;
 
 namespace Cicd.Server.Security;
 
 public static class SecurityServiceCollectionExtensions
 {
-    public static IServiceCollection AddCicdSecurity(this IServiceCollection services, IConfiguration configuration)
+    public static IServiceCollection AddCicdSecurity(this IServiceCollection services, IConfiguration configuration, bool isDevelopment)
     {
         services.Configure<AgentsOptions>(configuration.GetSection(AgentsOptions.SectionName));
         services.Configure<OidcOptions>(configuration.GetSection(OidcOptions.SectionName));
@@ -20,18 +21,19 @@ public static class SecurityServiceCollectionExtensions
 
         services.AddHttpContextAccessor();
         services.AddScoped<IClaimsTransformation, LocalUserClaimsTransformation>();
+        services.AddScoped<AuthenticationStateProvider, UserRevalidatingAuthenticationStateProvider>();
 
         var authentication = services.AddAuthentication(SchemeSelector.SchemeName)
             .AddPolicyScheme(SchemeSelector.SchemeName, "Cookie, IdP bearer or static token", options =>
                 options.ForwardDefaultSelector = context => SchemeSelector.Select(context.Request, oidc.IsConfigured))
             .AddScheme<AuthenticationSchemeOptions, TokenAuthenticationHandler>(TokenAuthenticationHandler.SchemeName, null)
-            .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, ConfigureCookie);
+            .AddCookie(CookieAuthenticationDefaults.AuthenticationScheme, options => ConfigureCookie(options, isDevelopment));
 
         if (oidc.IsConfigured)
         {
             authentication
                 .AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, options => ConfigureJwtBearer(options, oidc))
-                .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options => ConfigureOpenIdConnect(options, oidc));
+                .AddOpenIdConnect(OpenIdConnectDefaults.AuthenticationScheme, options => ConfigureOpenIdConnect(options, oidc, isDevelopment));
         }
 
         services.AddSingleton<IAuthorizationHandler, RoleRequirementHandler>();
@@ -43,10 +45,11 @@ public static class SecurityServiceCollectionExtensions
         return services;
     }
 
-    private static void ConfigureCookie(CookieAuthenticationOptions options)
+    private static void ConfigureCookie(CookieAuthenticationOptions options, bool isDevelopment)
     {
         options.Cookie.Name = "cicd.session";
         options.Cookie.SameSite = SameSiteMode.Lax;
+        options.Cookie.SecurePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
         options.LoginPath = "/login";
         options.LogoutPath = "/logout";
         options.AccessDeniedPath = "/access-denied";
@@ -95,7 +98,7 @@ public static class SecurityServiceCollectionExtensions
         };
     }
 
-    private static void ConfigureOpenIdConnect(OpenIdConnectOptions options, OidcOptions oidc)
+    private static void ConfigureOpenIdConnect(OpenIdConnectOptions options, OidcOptions oidc, bool isDevelopment)
     {
         options.Authority = oidc.Authority.TrimEnd('/');
         options.ClientId = oidc.ClientId;
@@ -118,11 +121,25 @@ public static class SecurityServiceCollectionExtensions
         // Query response mode plus Lax cookies keeps the round trip working over plain http://localhost.
         options.CorrelationCookie.SameSite = SameSiteMode.Lax;
         options.NonceCookie.SameSite = SameSiteMode.Lax;
+        var securePolicy = isDevelopment ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
+        options.CorrelationCookie.SecurePolicy = securePolicy;
+        options.NonceCookie.SecurePolicy = securePolicy;
         if (!oidc.UsePushedAuthorization)
         {
             options.PushedAuthorizationBehavior = PushedAuthorizationBehavior.Disable;
         }
         options.Events.OnTicketReceived = OnTicketReceivedAsync;
+        options.Events.OnRemoteFailure = OnRemoteFailure;
+    }
+
+    /// <summary>The IdP round trip failed (denied consent, bad state, expired correlation). Log why and show the reason page.</summary>
+    private static Task OnRemoteFailure(RemoteFailureContext context)
+    {
+        var logger = context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>().CreateLogger("Cicd.Server.Security.Oidc");
+        logger.LogWarning("OIDC sign-in failed: {Reason}", context.Failure?.Message ?? "no failure message");
+        context.Response.Redirect("/access-denied?reason=login-failed");
+        context.HandleResponse();
+        return Task.CompletedTask;
     }
 
     /// <summary>Runs after id_token and userinfo claims are merged. Upserts the local user and issues a slim cookie principal.</summary>

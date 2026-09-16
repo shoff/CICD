@@ -41,7 +41,10 @@
         {
             return;
         }
-        if (string.IsNullOrWhiteSpace(newName)) return;
+        if (string.IsNullOrWhiteSpace(newName))
+        {
+            return;
+        }
         await using var db = await DbFactory.CreateDbContextAsync();
         db.Projects.Add(new Project { Name = newName.Trim() });
         await db.SaveChangesAsync();

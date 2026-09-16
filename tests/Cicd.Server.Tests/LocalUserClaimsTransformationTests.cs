@@ -24,8 +24,17 @@ public class LocalUserClaimsTransformationTests : IDisposable
     }
 
     private static ClaimsPrincipal IdpPrincipal(string scheme = "Bearer", string subject = "sub-1") =>
+        IdpPrincipal([], scheme, subject);
+
+    private static ClaimsPrincipal IdpPrincipal(Claim[] extra, string scheme = "Bearer", string subject = "sub-1") =>
         new(new ClaimsIdentity(
-            [new Claim("iss", "https://idp"), new Claim("sub", subject), new Claim("email", "alice@example.com"), new Claim("name", "Alice")],
+            [
+                new Claim("iss", "https://idp"),
+                new Claim("sub", subject),
+                new Claim("email", "alice@example.com"),
+                new Claim("name", "Alice"),
+                .. extra,
+            ],
             scheme));
 
     [Fact]
@@ -88,6 +97,34 @@ public class LocalUserClaimsTransformationTests : IDisposable
         var (transformation, _, accessor) = Build();
         accessor.HttpContext = null;
         var result = await transformation.TransformAsync(IdpPrincipal());
+        Assert.True(result.IsInRole("viewer"));
+    }
+
+    [Fact]
+    public async Task Inbound_role_claims_from_the_idp_are_ignored()
+    {
+        var (transformation, _, _) = Build();
+        var principal = IdpPrincipal([new Claim(ClaimTypes.Role, "admin"), new Claim(ClaimTypes.Role, "agent")]);
+        var result = await transformation.TransformAsync(principal);
+        Assert.True(result.IsInRole("viewer"));
+        Assert.False(result.IsInRole("admin"));
+        Assert.False(result.IsInRole("agent"));
+    }
+
+    [Fact]
+    public async Task Inbound_cicd_claims_from_the_idp_are_replaced()
+    {
+        var (transformation, db, _) = Build();
+        var principal = IdpPrincipal(
+        [
+            new Claim(LocalUserClaimsTransformation.UserIdClaim, "00000000-0000-0000-0000-000000000001"),
+            new Claim(LocalUserClaimsTransformation.DisabledClaim, "true"),
+        ]);
+        var result = await transformation.TransformAsync(principal);
+        var user = await db.Users.SingleAsync();
+        var userIds = result.FindAll(LocalUserClaimsTransformation.UserIdClaim).ToList();
+        Assert.Equal(user.Id.ToString(), Assert.Single(userIds).Value);
+        Assert.Empty(result.FindAll(LocalUserClaimsTransformation.DisabledClaim));
         Assert.True(result.IsInRole("viewer"));
     }
 

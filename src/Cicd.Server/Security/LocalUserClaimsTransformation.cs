@@ -6,8 +6,9 @@ namespace Cicd.Server.Security;
 
 /// <summary>
 /// Turns an IdP identity (session cookie or bearer JWT) into a CICD user: loads or creates the local row by issuer and
-/// subject, then adds the role claims authorization runs on. Runs once per request for a given principal; static-token
-/// identities pass through.
+/// subject, then adds the role claims authorization runs on. Any inbound <see cref="ClaimTypes.Role"/> or <c>cicd:</c>
+/// claim is discarded first, so roles can only ever come from the local user row and never from the IdP. Runs once per
+/// request for a given principal; static-token identities pass through.
 /// </summary>
 public sealed class LocalUserClaimsTransformation(UserService users, IHttpContextAccessor accessor) : IClaimsTransformation
 {
@@ -35,8 +36,7 @@ public sealed class LocalUserClaimsTransformation(UserService users, IHttpContex
     private async Task<ClaimsPrincipal> ResolveAsync(ClaimsPrincipal principal, CancellationToken cancellationToken)
     {
         if (principal.Identity is not ClaimsIdentity { IsAuthenticated: true } identity
-            || identity.AuthenticationType == TokenAuthenticationHandler.SchemeName
-            || identity.HasClaim(c => c.Type == UserIdClaim))
+            || identity.AuthenticationType == TokenAuthenticationHandler.SchemeName)
         {
             return principal;
         }
@@ -47,7 +47,8 @@ public sealed class LocalUserClaimsTransformation(UserService users, IHttpContex
         }
         var user = await users.EnsureUserAsync(external, cancellationToken);
 
-        var enriched = new ClaimsIdentity(identity.Claims, identity.AuthenticationType, ClaimTypes.Name, ClaimTypes.Role);
+        var kept = identity.Claims.Where(c => c.Type != ClaimTypes.Role && !c.Type.StartsWith("cicd:", StringComparison.Ordinal));
+        var enriched = new ClaimsIdentity(kept, identity.AuthenticationType, ClaimTypes.Name, ClaimTypes.Role);
         enriched.AddClaim(new Claim(UserIdClaim, user.Id.ToString()));
         enriched.AddClaim(new Claim(ClaimTypes.Name, user.DisplayName ?? user.Username ?? user.Email ?? user.Subject));
         if (user.Disabled)

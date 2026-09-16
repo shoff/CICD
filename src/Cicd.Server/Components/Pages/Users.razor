@@ -15,12 +15,12 @@
     <tbody>
     @foreach (var u in users)
     {
-        <tr class="@(u.Disabled ? "muted" : "")">
+        <tr class="@(u.Disabled ? "muted" : "")" @key="u.Id">
             <td>@u.DisplayName</td>
             <td>@u.Username</td>
             <td>@u.Email</td>
             <td>
-                <select value="@u.Role" disabled="@u.Disabled" @onchange="e => SetRoleAsync(u.Id, Enum.Parse<UserRole>((string)e.Value!))">
+                <select value="@u.Role" disabled="@u.Disabled" @onchange="e => SetRoleAsync(u.Id, e.Value?.ToString())">
                     @foreach (var role in Enum.GetValues<UserRole>())
                     {
                         <option value="@role">@role</option>
@@ -46,8 +46,15 @@
         users = (await scope.ServiceProvider.GetRequiredService<UserService>().ListAsync(CancellationToken.None)).Select(u => u.ToDto()).ToList();
     }
 
-    private Task SetRoleAsync(Guid id, UserRole role) =>
-        RunAsync((service, me) => service.SetRoleAsync(id, role, me, CancellationToken.None));
+    private Task SetRoleAsync(Guid id, string? role)
+    {
+        if (!Enum.TryParse<UserRole>(role, out var parsed))
+        {
+            error = "Unknown role.";
+            return Task.CompletedTask;
+        }
+        return RunAsync((service, me) => service.SetRoleAsync(id, parsed, me, CancellationToken.None));
+    }
 
     private Task SetDisabledAsync(Guid id, bool disabled) =>
         RunAsync((service, me) => service.SetDisabledAsync(id, disabled, me, CancellationToken.None));
