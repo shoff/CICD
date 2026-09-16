@@ -32,9 +32,21 @@ public sealed class RoleRequirementHandler(IOptions<OidcOptions> oidc, IOptions<
     /// <summary>The highest role the principal holds, or null for anonymous, agent-only or disabled principals.</summary>
     public static UserRole? Level(ClaimsPrincipal user)
     {
-        if (user.IsInRole(Roles.Admin)) return UserRole.Admin;
-        if (user.IsInRole(Roles.Developer)) return UserRole.Developer;
-        if (user.IsInRole(Roles.Viewer)) return UserRole.Viewer;
+        if (user.IsInRole(Roles.Admin))
+        {
+            return UserRole.Admin;
+        }
+
+        if (user.IsInRole(Roles.Developer))
+        {
+            return UserRole.Developer;
+        }
+
+        if (user.IsInRole(Roles.Viewer))
+        {
+            return UserRole.Viewer;
+        }
+
         return null;
     }
 }

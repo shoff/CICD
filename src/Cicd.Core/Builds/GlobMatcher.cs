@@ -20,7 +20,10 @@ public static class GlobMatcher
             var matches = ToRegex(rule).IsMatch(value);
             if (exclude)
             {
-                if (matches) return false;
+                if (matches)
+                {
+                    return false;
+                }
             }
             else
             {

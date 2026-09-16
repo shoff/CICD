@@ -18,7 +18,14 @@ public sealed class ArtifactUploader(IHttpClientFactory httpClientFactory)
         var matcher = new Matcher(StringComparison.OrdinalIgnoreCase);
         foreach (var pattern in patterns)
         {
-            if (pattern.StartsWith('!')) matcher.AddExclude(pattern[1..]); else matcher.AddInclude(pattern);
+            if (pattern.StartsWith('!'))
+            {
+                matcher.AddExclude(pattern[1..]);
+            }
+            else
+            {
+                matcher.AddInclude(pattern);
+            }
         }
         var matches = matcher.Execute(new DirectoryInfoWrapper(new DirectoryInfo(workingDirectory)));
         if (!matches.HasMatches)

@@ -40,11 +40,17 @@ public static class AgentMatcher
             var present = lookup.TryGetValue(name, out var actual);
             if (expected == "*")
             {
-                if (!present) unmet.Add($"{name} must exist");
+                if (!present)
+                {
+                    unmet.Add($"{name} must exist");
+                }
             }
             else if (expected.StartsWith('!'))
             {
-                if (present && string.Equals(actual, expected[1..], StringComparison.OrdinalIgnoreCase)) unmet.Add($"{name} must not be '{expected[1..]}'");
+                if (present && string.Equals(actual, expected[1..], StringComparison.OrdinalIgnoreCase))
+                {
+                    unmet.Add($"{name} must not be '{expected[1..]}'");
+                }
             }
             else if (!present || !string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
             {

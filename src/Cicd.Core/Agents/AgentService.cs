@@ -64,7 +64,11 @@ public sealed class AgentService(CicdDbContext db, AgentConnectionRegistry conne
     public async Task<Agent?> SetAuthorizedAsync(Guid agentId, bool authorized, CancellationToken cancellationToken)
     {
         var agent = await db.Agents.FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken);
-        if (agent is null) return null;
+        if (agent is null)
+        {
+            return null;
+        }
+
         agent.Authorized = authorized;
         await db.SaveChangesAsync(cancellationToken);
         await broadcaster.AgentUpdatedAsync(agent, cancellationToken);
@@ -74,7 +78,11 @@ public sealed class AgentService(CicdDbContext db, AgentConnectionRegistry conne
     public async Task<Agent?> SetEnabledAsync(Guid agentId, bool enabled, CancellationToken cancellationToken)
     {
         var agent = await db.Agents.FirstOrDefaultAsync(a => a.Id == agentId, cancellationToken);
-        if (agent is null) return null;
+        if (agent is null)
+        {
+            return null;
+        }
+
         agent.Enabled = enabled;
         await db.SaveChangesAsync(cancellationToken);
         await broadcaster.AgentUpdatedAsync(agent, cancellationToken);

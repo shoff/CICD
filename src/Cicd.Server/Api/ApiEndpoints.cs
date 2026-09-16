@@ -41,7 +41,11 @@ public static class ApiEndpoints
 
         group.MapPost("/", async Task<IResult> (CreateProjectRequest request, CicdDbContext db, CancellationToken ct) =>
         {
-            if (string.IsNullOrWhiteSpace(request.Name)) return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["name"] = ["Name is required."] });
+            }
+
             var project = new Project { Name = request.Name.Trim(), Description = request.Description, ParentId = request.ParentId };
             db.Projects.Add(project);
             await db.SaveChangesAsync(ct);
@@ -63,12 +67,30 @@ public static class ApiEndpoints
         group.MapPost("/", async Task<IResult> (CreateVcsRootRequest request, CicdDbContext db, IEnumerable<IVcsProvider> providers, CancellationToken ct) =>
         {
             var errors = new Dictionary<string, string[]>();
-            if (string.IsNullOrWhiteSpace(request.Name)) errors["name"] = ["Name is required."];
-            if (string.IsNullOrWhiteSpace(request.Url)) errors["url"] = ["Url is required."];
+            if (string.IsNullOrWhiteSpace(request.Name))
+            {
+                errors["name"] = ["Name is required."];
+            }
+
+            if (string.IsNullOrWhiteSpace(request.Url))
+            {
+                errors["url"] = ["Url is required."];
+            }
+
             if (!providers.Any(p => string.Equals(p.Id, request.ProviderId, StringComparison.OrdinalIgnoreCase)))
+            {
                 errors["providerId"] = [$"No VCS provider '{request.ProviderId}' is installed. Available: {string.Join(", ", providers.Select(p => p.Id))}"];
-            if (!await db.Projects.AnyAsync(p => p.Id == request.ProjectId, ct)) errors["projectId"] = ["Project does not exist."];
-            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            }
+
+            if (!await db.Projects.AnyAsync(p => p.Id == request.ProjectId, ct))
+            {
+                errors["projectId"] = ["Project does not exist."];
+            }
+
+            if (errors.Count > 0)
+            {
+                return Results.ValidationProblem(errors);
+            }
 
             var root = new VcsRoot
             {
@@ -87,9 +109,17 @@ public static class ApiEndpoints
         group.MapPost("/{id:guid}/test", async Task<IResult> (Guid id, CicdDbContext db, IEnumerable<IVcsProvider> providers, CancellationToken ct) =>
         {
             var root = await db.VcsRoots.FindAsync([id], ct);
-            if (root is null) return Results.NotFound();
+            if (root is null)
+            {
+                return Results.NotFound();
+            }
+
             var provider = providers.FirstOrDefault(p => string.Equals(p.Id, root.ProviderId, StringComparison.OrdinalIgnoreCase));
-            if (provider is null) return Results.Problem($"No VCS provider '{root.ProviderId}' is installed.");
+            if (provider is null)
+            {
+                return Results.Problem($"No VCS provider '{root.ProviderId}' is installed.");
+            }
+
             var error = await provider.TestConnectionAsync(root.ToInfo(), ct);
             return Results.Ok(new { ok = error is null, message = error ?? "Connection successful." });
         });
@@ -109,7 +139,11 @@ public static class ApiEndpoints
         group.MapPost("/", async Task<IResult> (UpsertBuildConfigurationRequest request, CicdDbContext db, IEnumerable<IBuildStepType> stepTypes, IEnumerable<IBuildTrigger> triggers, CancellationToken ct) =>
         {
             var errors = await ValidateAsync(request, db, stepTypes, triggers, ct);
-            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            if (errors.Count > 0)
+            {
+                return Results.ValidationProblem(errors);
+            }
+
             var configuration = new BuildConfiguration { ProjectId = request.ProjectId, Name = request.Name.Trim() };
             Apply(configuration, request);
             db.BuildConfigurations.Add(configuration);
@@ -120,9 +154,17 @@ public static class ApiEndpoints
         group.MapPut("/{id:guid}", async Task<IResult> (Guid id, UpsertBuildConfigurationRequest request, CicdDbContext db, IEnumerable<IBuildStepType> stepTypes, IEnumerable<IBuildTrigger> triggers, CancellationToken ct) =>
         {
             var configuration = await db.BuildConfigurations.FindAsync([id], ct);
-            if (configuration is null) return Results.NotFound();
+            if (configuration is null)
+            {
+                return Results.NotFound();
+            }
+
             var errors = await ValidateAsync(request, db, stepTypes, triggers, ct);
-            if (errors.Count > 0) return Results.ValidationProblem(errors);
+            if (errors.Count > 0)
+            {
+                return Results.ValidationProblem(errors);
+            }
+
             configuration.ProjectId = request.ProjectId;
             configuration.Name = request.Name.Trim();
             Apply(configuration, request);
@@ -134,7 +176,11 @@ public static class ApiEndpoints
         group.MapPost("/{id:guid}/pause", async Task<IResult> (Guid id, bool paused, CicdDbContext db, CancellationToken ct) =>
         {
             var configuration = await db.BuildConfigurations.FindAsync([id], ct);
-            if (configuration is null) return Results.NotFound();
+            if (configuration is null)
+            {
+                return Results.NotFound();
+            }
+
             configuration.Paused = paused;
             await db.SaveChangesAsync(ct);
             return Results.Ok(configuration.ToDto());
@@ -161,9 +207,20 @@ public static class ApiEndpoints
     private static async Task<Dictionary<string, string[]>> ValidateAsync(UpsertBuildConfigurationRequest request, CicdDbContext db, IEnumerable<IBuildStepType> stepTypes, IEnumerable<IBuildTrigger> triggers, CancellationToken ct)
     {
         var errors = new Dictionary<string, string[]>();
-        if (string.IsNullOrWhiteSpace(request.Name)) errors["name"] = ["Name is required."];
-        if (!await db.Projects.AnyAsync(p => p.Id == request.ProjectId, ct)) errors["projectId"] = ["Project does not exist."];
-        if (request.VcsRootId is { } rootId && !await db.VcsRoots.AnyAsync(v => v.Id == rootId, ct)) errors["vcsRootId"] = ["VCS root does not exist."];
+        if (string.IsNullOrWhiteSpace(request.Name))
+        {
+            errors["name"] = ["Name is required."];
+        }
+
+        if (!await db.Projects.AnyAsync(p => p.Id == request.ProjectId, ct))
+        {
+            errors["projectId"] = ["Project does not exist."];
+        }
+
+        if (request.VcsRootId is { } rootId && !await db.VcsRoots.AnyAsync(v => v.Id == rootId, ct))
+        {
+            errors["vcsRootId"] = ["VCS root does not exist."];
+        }
 
         var types = stepTypes.ToDictionary(t => t.Id, StringComparer.OrdinalIgnoreCase);
         var stepErrors = new List<string>();
@@ -183,11 +240,18 @@ public static class ApiEndpoints
             }
             stepErrors.AddRange(type.Validate(step.Parameters).Select(e => $"steps[{index}]: {e}"));
         }
-        if (stepErrors.Count > 0) errors["steps"] = [.. stepErrors];
+        if (stepErrors.Count > 0)
+        {
+            errors["steps"] = [.. stepErrors];
+        }
 
         var triggerTypes = triggers.Select(t => t.TypeId).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var triggerErrors = (request.Triggers ?? []).Where(t => !triggerTypes.Contains(t.TypeId)).Select(t => $"unknown trigger type '{t.TypeId}'. Installed: {string.Join(", ", triggerTypes)}").ToArray();
-        if (triggerErrors.Length > 0) errors["triggers"] = triggerErrors;
+        if (triggerErrors.Length > 0)
+        {
+            errors["triggers"] = triggerErrors;
+        }
+
         return errors;
     }
 
@@ -231,7 +295,11 @@ public static class ApiEndpoints
         group.MapGet("/{id:guid}/log", async Task<IResult> (Guid id, long? after, int? take, CicdDbContext db, CancellationToken ct) =>
         {
             var build = await db.Builds.AsNoTracking().FirstOrDefaultAsync(b => b.Id == id, ct);
-            if (build is null) return Results.NotFound();
+            if (build is null)
+            {
+                return Results.NotFound();
+            }
+
             var lines = await db.BuildLogLines.AsNoTracking()
                 .Where(l => l.BuildId == id && l.Sequence > (after ?? -1))
                 .OrderBy(l => l.Sequence)
@@ -243,7 +311,11 @@ public static class ApiEndpoints
 
         group.MapGet("/{id:guid}/log.txt", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
         {
-            if (!await db.Builds.AnyAsync(b => b.Id == id, ct)) return Results.NotFound();
+            if (!await db.Builds.AnyAsync(b => b.Id == id, ct))
+            {
+                return Results.NotFound();
+            }
+
             var lines = await db.BuildLogLines.AsNoTracking().Where(l => l.BuildId == id).OrderBy(l => l.Sequence).Select(l => l.Text).ToListAsync(ct);
             return Results.Text(string.Join('\n', lines), "text/plain");
         }).RequireAuthorization(Policies.Admin);
@@ -253,14 +325,22 @@ public static class ApiEndpoints
 
         group.MapGet("/{id:guid}/artifacts", async Task<IResult> (Guid id, CicdDbContext db, CancellationToken ct) =>
         {
-            if (!await db.Builds.AnyAsync(b => b.Id == id, ct)) return Results.NotFound();
+            if (!await db.Builds.AnyAsync(b => b.Id == id, ct))
+            {
+                return Results.NotFound();
+            }
+
             return Results.Ok(await db.BuildArtifacts.Where(a => a.BuildId == id).OrderBy(a => a.Path).Select(a => a.ToDto()).ToListAsync(ct));
         }).RequireAuthorization(Policies.Admin);
 
         group.MapGet("/{id:guid}/artifacts/{**path}", async Task<IResult> (Guid id, string path, CicdDbContext db, ArtifactStore store, CancellationToken ct) =>
         {
             var artifact = await db.BuildArtifacts.FirstOrDefaultAsync(a => a.BuildId == id && a.Path == path, ct);
-            if (artifact is null) return Results.NotFound();
+            if (artifact is null)
+            {
+                return Results.NotFound();
+            }
+
             var stream = store.Open(artifact);
             return stream is null ? Results.NotFound() : Results.File(stream, "application/octet-stream", Path.GetFileName(artifact.Path));
         }).RequireAuthorization(Policies.Admin);
@@ -268,7 +348,11 @@ public static class ApiEndpoints
         // Agents publish artifacts here with the agent token.
         group.MapPost("/{id:guid}/artifacts", async Task<IResult> (Guid id, [FromQuery] string path, HttpRequest request, CicdDbContext db, ArtifactStore store, CancellationToken ct) =>
         {
-            if (!await db.Builds.AnyAsync(b => b.Id == id, ct)) return Results.NotFound();
+            if (!await db.Builds.AnyAsync(b => b.Id == id, ct))
+            {
+                return Results.NotFound();
+            }
+
             var artifact = await store.SaveAsync(id, path, request.Body, ct);
             return Results.Created($"/api/v1/builds/{id}/artifacts/{artifact.Path}", artifact.ToDto());
         }).RequireAuthorization(Policies.Agent).DisableAntiforgery();
@@ -295,7 +379,11 @@ public static class ApiEndpoints
         {
             var agent = await db.Agents.FindAsync([id], ct);
             var configuration = await db.BuildConfigurations.Include(c => c.VcsRoot).FirstOrDefaultAsync(c => c.Id == configurationId, ct);
-            if (agent is null || configuration is null) return Results.NotFound();
+            if (agent is null || configuration is null)
+            {
+                return Results.NotFound();
+            }
+
             var unmet = AgentMatcher.Explain(AgentMatcher.EffectiveRequirements(configuration), agent.Capabilities);
             return Results.Ok(new { compatible = unmet.Count == 0, unmet });
         });
@@ -332,7 +420,11 @@ public static class ApiEndpoints
         // Authentication is delegated to the handler (e.g. GitHub HMAC signature).
         group.MapPost("/{providerId}", async Task<IResult> (string providerId, HttpRequest request, WebhookService webhooks, CancellationToken ct) =>
         {
-            if (!webhooks.HasHandler(providerId)) return Results.NotFound(new { error = $"No webhook handler for '{providerId}'." });
+            if (!webhooks.HasHandler(providerId))
+            {
+                return Results.NotFound(new { error = $"No webhook handler for '{providerId}'." });
+            }
+
             using var reader = new StreamReader(request.Body);
             var body = await reader.ReadToEndAsync(ct);
             var headers = request.Headers.ToDictionary(h => h.Key, h => h.Value.ToString(), StringComparer.OrdinalIgnoreCase);

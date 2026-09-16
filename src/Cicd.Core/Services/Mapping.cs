@@ -43,8 +43,16 @@ public static class Mapping
     private static IReadOnlyList<string> SidesOf(PluginSide sides)
     {
         var list = new List<string>();
-        if (sides.HasFlag(PluginSide.Server)) list.Add("server");
-        if (sides.HasFlag(PluginSide.Agent)) list.Add("agent");
+        if (sides.HasFlag(PluginSide.Server))
+        {
+            list.Add("server");
+        }
+
+        if (sides.HasFlag(PluginSide.Agent))
+        {
+            list.Add("agent");
+        }
+
         return list;
     }
 

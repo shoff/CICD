@@ -72,8 +72,16 @@ public static class PluginManifestReader
         public override void Write(Utf8JsonWriter writer, PluginSide value, JsonSerializerOptions options)
         {
             writer.WriteStartArray();
-            if (value.HasFlag(PluginSide.Server)) writer.WriteStringValue("server");
-            if (value.HasFlag(PluginSide.Agent)) writer.WriteStringValue("agent");
+            if (value.HasFlag(PluginSide.Server))
+            {
+                writer.WriteStringValue("server");
+            }
+
+            if (value.HasFlag(PluginSide.Agent))
+            {
+                writer.WriteStringValue("agent");
+            }
+
             writer.WriteEndArray();
         }
 

@@ -33,8 +33,16 @@ public static class ProcessRunner
         }
 
         using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
-        process.OutputDataReceived += (_, e) => { if (e.Data is not null) log.Info(e.Data); };
-        process.ErrorDataReceived += (_, e) => { if (e.Data is not null) log.Warning(e.Data); };
+        process.OutputDataReceived += (_, e) => { if (e.Data is not null)
+            {
+                log.Info(e.Data);
+            }
+        };
+        process.ErrorDataReceived += (_, e) => { if (e.Data is not null)
+            {
+                log.Warning(e.Data);
+            }
+        };
 
         if (!process.Start())
         {

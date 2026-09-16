@@ -144,7 +144,10 @@ public sealed class AgentWorker(BuildExecutor executor, CapabilityCollector capa
         {
             lock (gate)
             {
-                if (current?.BuildId == job.BuildId) current = null;
+                if (current?.BuildId == job.BuildId)
+                {
+                    current = null;
+                }
             }
             cancellation.Dispose();
         }

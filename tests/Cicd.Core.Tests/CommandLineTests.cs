@@ -26,7 +26,11 @@ public class CommandLineTests
     [Fact]
     public async Task Runner_executes_script_and_streams_output()
     {
-        if (OperatingSystem.IsWindows()) return;
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         var log = new CollectingLog();
         var temp = Directory.CreateTempSubdirectory("cicd-test-");
         try

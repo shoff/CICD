@@ -42,7 +42,11 @@ public sealed record RepositoryCoordinates(string Owner, string Name)
     public static RepositoryCoordinates? Parse(string url)
     {
         var value = url.Trim();
-        if (value.EndsWith(".git", StringComparison.OrdinalIgnoreCase)) value = value[..^4];
+        if (value.EndsWith(".git", StringComparison.OrdinalIgnoreCase))
+        {
+            value = value[..^4];
+        }
+
         string path;
         if (value.StartsWith("git@github.com:", StringComparison.OrdinalIgnoreCase))
         {
@@ -86,7 +90,10 @@ public sealed class GitHubClient(IHttpClientFactory httpClientFactory, IConfigur
         {
             var batch = await client.GetFromJsonAsync<List<PullRequestPayload>>($"repos/{repo.Owner}/{repo.Name}/pulls?state=open&per_page=100&page={page}", Json, cancellationToken) ?? [];
             all.AddRange(batch);
-            if (batch.Count < 100) break;
+            if (batch.Count < 100)
+            {
+                break;
+            }
         }
         return all;
     }
