@@ -1,17 +1,11 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
+using Cicd.Core.Users;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.Extensions.Options;
 
 namespace Cicd.Server.Security;
-
-public sealed class SecurityOptions
-{
-    public const string SectionName = "Security";
-    /// <summary>Token for administrative API access. When empty the API is open; only acceptable on a trusted network.</summary>
-    public string ApiToken { get; set; } = "";
-}
 
 public sealed class AgentsOptions
 {
@@ -115,7 +109,6 @@ public static class SecurityServiceCollectionExtensions
 {
     public static IServiceCollection AddCicdSecurity(this IServiceCollection services, IConfiguration configuration)
     {
-        services.Configure<SecurityOptions>(configuration.GetSection(SecurityOptions.SectionName));
         services.Configure<AgentsOptions>(configuration.GetSection(AgentsOptions.SectionName));
         services.AddAuthentication(TokenAuthenticationHandler.SchemeName)
             .AddScheme<AuthenticationSchemeOptions, TokenAuthenticationHandler>(TokenAuthenticationHandler.SchemeName, null);
