@@ -118,6 +118,13 @@ created with the `viewer` role; emails listed in `Security:BootstrapAdmins` beco
 Admins change roles on `/users` or with `PUT /api/v1/users/{id}/role`. Changes apply on the next request.
 API clients send an IdP access token as `Authorization: Bearer <jwt>`; the same local user and role apply.
 `Security:ApiToken` is a static admin credential for automation. Agents use `Agents:AuthToken` only.
+Until an API resource for CICD exists at the IdP and `Oidc:ValidateAudience` is on, any access token identity-dev
+issued to any application authenticates to CICD as that user. Enable audience validation as soon as the resource
+is registered.
+
+Behind a TLS-terminating proxy set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` on the server so the OIDC
+`redirect_uri` and cookies use the public `https` scheme. Outside the Development environment the session,
+correlation and nonce cookies are always marked `Secure`.
 
 Register a client at the IdP with redirect URI `<Server:PublicUrl>/signin-oidc` (and `http://localhost:5000/signin-oidc`
 for development), post-logout redirect `<Server:PublicUrl>/signout-callback-oidc`, and scopes `openid profile email`.

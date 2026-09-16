@@ -85,7 +85,7 @@ Migrations: `dotnet-ef` targets net8.0; with only the .NET 10 runtime installed 
 ## Gaps, in the order I would tackle them
 
 1. **Build the Docker images and run `docker compose up`.** Nobody has. Expect small path or apt issues, not design issues.
-2. **First real login.** Register the CICD client at identity-dev, set Oidc:ClientId and Security:BootstrapAdmins, sign in, confirm the bootstrap admin lands on /users, then verify a JWT against /api/v1/builds and /hubs/builds.
+2. **First real login.** Register the CICD client at identity-dev, set Oidc:ClientId and Security:BootstrapAdmins, sign in, confirm the bootstrap admin lands on /users, then verify a JWT against /api/v1/builds and /hubs/builds, then register an API resource for CICD at the IdP and turn on `Oidc:ValidateAudience` (until then any identity-dev token authenticates); also check the access token `typ` header at first login before considering `TokenValidationParameters.ValidTypes`.
 3. **Secrets at rest.** VCS root `Properties` (tokens, passwords) are plain jsonb. Redacted in API output only.
    Add a data protection based encrypter in `Mapping`/`VcsRoot` persistence, or a dedicated `secrets` table.
 4. **UI editing** of VCS roots and build configurations. The API does it; the UI only creates projects and queues builds.

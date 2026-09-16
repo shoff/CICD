@@ -26,6 +26,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       ConnectionStrings__Cicd: "Host=postgres;Port=5432;Database=cicd;Username=cicd;Password=${POSTGRES_PASSWORD:-cicd}"
       Server__PublicUrl: ${SERVER_PUBLIC_URL:-http://localhost:8080}
       Agents__AuthToken: ${AGENT_AUTH_TOKEN:?set AGENT_AUTH_TOKEN in .env}
