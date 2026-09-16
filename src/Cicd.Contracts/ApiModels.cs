@@ -113,3 +113,17 @@ public sealed record PluginDto(string Id, string Name, string Version, string De
 public sealed record StepTypeDto(string Id, string DisplayName, string Description, IReadOnlyList<ParameterDefinitionDto> Parameters);
 
 public sealed record ParameterDefinitionDto(string Name, string DisplayName, string? Description, bool Required, string? DefaultValue, string Kind);
+
+public sealed record UserDto(
+    Guid Id,
+    string? Username,
+    string? Email,
+    string? DisplayName,
+    UserRole Role,
+    bool Disabled,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? LastSeenAt);
+
+public sealed record SetUserRoleRequest(UserRole Role);
+
+public sealed record SetUserDisabledRequest(bool Disabled);

@@ -31,6 +31,8 @@ public static class Mapping
 
     public static PullRequestDto ToDto(this PullRequest p) => new(p.Id, p.VcsRootId, p.Number, p.Title, p.SourceBranch, p.TargetBranch, p.HeadSha, p.Author, p.State, p.Url, p.UpdatedAt);
 
+    public static UserDto ToDto(this User u) => new(u.Id, u.Username, u.Email, u.DisplayName, u.Role, u.Disabled, u.CreatedAt, u.LastSeenAt);
+
     public static PluginDto ToDto(this LoadedPlugin p) => new(
         p.Manifest.Id, p.Manifest.Name, p.Manifest.Version, p.Manifest.Description,
         SidesOf(p.Manifest.Sides), p.Contributions);

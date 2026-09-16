@@ -75,5 +75,57 @@ public class UserServiceTests : IDisposable
         Assert.Equal(first.AddMinutes(6), user.LastSeenAt);
     }
 
+    private static readonly ExternalIdentity Bob = new("https://idp", "sub-bob", "bob", "bob@example.com", "Bob");
+
+    [Fact]
+    public async Task Admin_can_change_another_users_role_and_disable_them()
+    {
+        await using var db = testDb.Create();
+        var service = Service(db, "alice@example.com");
+        var alice = await service.EnsureUserAsync(Alice, CancellationToken.None);
+        var bob = await service.EnsureUserAsync(Bob, CancellationToken.None);
+
+        var updated = await service.SetRoleAsync(bob.Id, UserRole.Developer, alice.Id, CancellationToken.None);
+        Assert.Equal(UserRole.Developer, updated!.Role);
+        updated = await service.SetDisabledAsync(bob.Id, true, alice.Id, CancellationToken.None);
+        Assert.True(updated!.Disabled);
+        Assert.Null(await service.SetRoleAsync(Guid.NewGuid(), UserRole.Admin, alice.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Users_cannot_change_or_disable_themselves()
+    {
+        await using var db = testDb.Create();
+        var service = Service(db, "alice@example.com");
+        var alice = await service.EnsureUserAsync(Alice, CancellationToken.None);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SetRoleAsync(alice.Id, UserRole.Viewer, alice.Id, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SetDisabledAsync(alice.Id, true, alice.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task The_last_active_admin_cannot_be_demoted_or_disabled()
+    {
+        await using var db = testDb.Create();
+        var service = Service(db, "alice@example.com");
+        var alice = await service.EnsureUserAsync(Alice, CancellationToken.None);
+        await service.EnsureUserAsync(Bob, CancellationToken.None);
+        // Acting as the static API token (no local user id).
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SetRoleAsync(alice.Id, UserRole.Developer, null, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => service.SetDisabledAsync(alice.Id, true, null, CancellationToken.None));
+        Assert.Equal(UserRole.Admin, (await service.FindAsync(alice.Id, CancellationToken.None))!.Role);
+    }
+
+    [Fact]
+    public async Task Demoting_an_admin_is_allowed_when_another_active_admin_exists()
+    {
+        await using var db = testDb.Create();
+        var service = Service(db, "alice@example.com", "bob@example.com");
+        var alice = await service.EnsureUserAsync(Alice, CancellationToken.None);
+        await service.EnsureUserAsync(Bob, CancellationToken.None);
+        var updated = await service.SetRoleAsync(alice.Id, UserRole.Viewer, null, CancellationToken.None);
+        Assert.Equal(UserRole.Viewer, updated!.Role);
+        Assert.Equal(2, (await service.ListAsync(CancellationToken.None)).Count);
+    }
+
     public void Dispose() => testDb.Dispose();
 }
