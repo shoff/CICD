@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <UserSecretsId>cicd-server</UserSecretsId>
+    <Description>CICD server: web UI, REST API, real-time build hub, and agent coordinator.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Cicd.Contracts/Cicd.Contracts.csproj" />
+    <ProjectReference Include="../Cicd.Plugins.Sdk/Cicd.Plugins.Sdk.csproj" />
+    <ProjectReference Include="../Cicd.Core/Cicd.Core.csproj" />
+    <ProjectReference Include="../Cicd.Data/Cicd.Data.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" />
+    <PackageReference Include="Scalar.AspNetCore" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,8 @@
+{
+  "id": "git",
+  "name": "Git",
+  "version": "1.0.0",
+  "description": "Git VCS support: revision polling and branch listing on the server, checkout on the agent.",
+  "assembly": "Cicd.Plugins.Git.dll",
+  "sides": ["server", "agent"]
+}

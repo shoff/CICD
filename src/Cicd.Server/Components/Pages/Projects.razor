@@ -1,0 +1,44 @@
+@page "/projects"
+@inject IDbContextFactory<CicdDbContext> DbFactory
+
+<PageTitle>Projects - CICD</PageTitle>
+<h1>Projects</h1>
+
+<form class="inline" @onsubmit="CreateAsync" @onsubmit:preventDefault>
+    <input placeholder="New project name" @bind="newName" />
+    <button type="submit" disabled="@string.IsNullOrWhiteSpace(newName)">Create</button>
+</form>
+
+@if (projects.Count == 0)
+{
+    <p class="muted">No projects yet. Create one above or POST /api/v1/projects.</p>
+}
+<ul class="list">
+@foreach (var p in projects)
+{
+    <li><a href="/projects/@p.Id">@p.Name</a> <span class="muted">@p.BuildConfigurations.Count configuration(s), @p.VcsRoots.Count VCS root(s)</span></li>
+}
+</ul>
+
+@code {
+    private List<Project> projects = [];
+    private string newName = "";
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        projects = await db.Projects.AsNoTracking().Include(p => p.BuildConfigurations).Include(p => p.VcsRoots).OrderBy(p => p.Name).ToListAsync();
+    }
+
+    private async Task CreateAsync()
+    {
+        if (string.IsNullOrWhiteSpace(newName)) return;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        db.Projects.Add(new Project { Name = newName.Trim() });
+        await db.SaveChangesAsync();
+        newName = "";
+        await LoadAsync();
+    }
+}

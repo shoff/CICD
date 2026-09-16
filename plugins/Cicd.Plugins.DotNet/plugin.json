@@ -1,0 +1,8 @@
+{
+  "id": "dotnet",
+  "name": ".NET CLI",
+  "version": "1.0.0",
+  "description": "Runs dotnet restore/build/test/publish/pack and reports the installed SDK as an agent capability.",
+  "assembly": "Cicd.Plugins.DotNet.dll",
+  "sides": ["server", "agent"]
+}

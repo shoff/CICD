@@ -1,0 +1,46 @@
+@page "/builds"
+@implements IDisposable
+@inject IDbContextFactory<CicdDbContext> DbFactory
+@inject BuildEventStream Events
+
+<PageTitle>Builds - CICD</PageTitle>
+<h1>Builds</h1>
+
+<table>
+    <thead><tr><th>Build</th><th>Status</th><th>Branch</th><th>Revision</th><th>Agent</th><th>Triggered by</th><th>Queued</th></tr></thead>
+    <tbody>
+    @foreach (var b in builds)
+    {
+        <tr>
+            <td><a href="/builds/@b.Id">@b.ProjectName / @b.BuildConfigurationName #@b.Number</a></td>
+            <td><StatusBadge Status="b.Status" /> <span class="muted">@b.StatusText</span></td>
+            <td>@b.Branch</td>
+            <td><code>@Short(b.Revision)</code></td>
+            <td>@(b.AgentName ?? "-")</td>
+            <td>@b.TriggeredBy</td>
+            <td>@b.QueuedAt.LocalDateTime.ToString("g")</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private List<BuildDto> builds = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        Events.BuildUpdated += OnBuildUpdated;
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        builds = (await db.Builds.AsNoTracking().Include(b => b.BuildConfiguration!).ThenInclude(c => c.Project).Include(b => b.Agent)
+            .OrderByDescending(b => b.QueuedAt).Take(100).ToListAsync()).Select(b => b.ToDto()).ToList();
+    }
+
+    private void OnBuildUpdated(BuildDto build) => _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    private static string Short(string? revision) => revision is null ? "-" : revision.Length > 10 ? revision[..10] : revision;
+    public void Dispose() => Events.BuildUpdated -= OnBuildUpdated;
+}

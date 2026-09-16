@@ -1,0 +1,111 @@
+@page "/projects/{Id:guid}"
+@implements IDisposable
+@inject IDbContextFactory<CicdDbContext> DbFactory
+@inject IServiceScopeFactory Scopes
+@inject BuildEventStream Events
+
+<PageTitle>@(project?.Name ?? "Project") - CICD</PageTitle>
+
+@if (project is null)
+{
+    <h1>Project not found</h1>
+}
+else
+{
+    <h1>@project.Name</h1>
+    <p class="muted">@project.Description</p>
+
+    <h2>Build configurations</h2>
+    @if (project.BuildConfigurations.Count == 0)
+    {
+        <p class="muted">None yet. Create one with <code>POST /api/v1/build-configurations</code> (see <a href="/api/docs">API docs</a>).</p>
+    }
+    <table>
+        <thead><tr><th>Name</th><th>Steps</th><th>Triggers</th><th>Pull requests</th><th>Last build</th><th></th></tr></thead>
+        <tbody>
+        @foreach (var c in project.BuildConfigurations.OrderBy(c => c.Name))
+        {
+            var last = lastBuilds.GetValueOrDefault(c.Id);
+            <tr>
+                <td>@c.Name @(c.Paused ? "(paused)" : "")</td>
+                <td>@string.Join(" → ", c.Steps.Select(s => s.Name))</td>
+                <td>@string.Join(", ", c.Triggers.Select(t => t.TypeId))</td>
+                <td>@(c.PullRequests.Enabled ? $"on ({c.PullRequests.TargetBranchFilter})" : "off")</td>
+                <td>@if (last is not null) { <a href="/builds/@last.Id">#@last.Number</a> <StatusBadge Status="last.Status" /> }</td>
+                <td><button @onclick="() => QueueAsync(c.Id)" disabled="@c.Paused">Run</button></td>
+            </tr>
+        }
+        </tbody>
+    </table>
+
+    <h2>VCS roots</h2>
+    <table>
+        <thead><tr><th>Name</th><th>Provider</th><th>URL</th><th>Default branch</th></tr></thead>
+        <tbody>
+        @foreach (var v in project.VcsRoots.OrderBy(v => v.Name))
+        {
+            <tr><td>@v.Name</td><td>@v.ProviderId</td><td>@v.Url</td><td>@v.DefaultBranch</td></tr>
+        }
+        </tbody>
+    </table>
+
+    <h2>Recent builds</h2>
+    <table>
+        <thead><tr><th>Build</th><th>Status</th><th>Branch</th><th>Triggered by</th><th>Queued</th></tr></thead>
+        <tbody>
+        @foreach (var b in builds)
+        {
+            <tr>
+                <td><a href="/builds/@b.Id">@b.BuildConfigurationName #@b.Number</a></td>
+                <td><StatusBadge Status="b.Status" /> <span class="muted">@b.StatusText</span></td>
+                <td>@b.Branch</td>
+                <td>@b.TriggeredBy</td>
+                <td>@b.QueuedAt.LocalDateTime.ToString("g")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private Project? project;
+    private List<BuildDto> builds = [];
+    private Dictionary<Guid, BuildDto> lastBuilds = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        Events.BuildUpdated += OnBuildUpdated;
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        project = await db.Projects.AsNoTracking().Include(p => p.BuildConfigurations).Include(p => p.VcsRoots).FirstOrDefaultAsync(p => p.Id == Id);
+        if (project is null) return;
+        builds = (await db.Builds.AsNoTracking()
+            .Include(b => b.BuildConfiguration!).ThenInclude(c => c.Project).Include(b => b.Agent)
+            .Where(b => b.BuildConfiguration!.ProjectId == Id)
+            .OrderByDescending(b => b.QueuedAt).Take(30).ToListAsync()).Select(b => b.ToDto()).ToList();
+        lastBuilds = builds.GroupBy(b => b.BuildConfigurationId).ToDictionary(g => g.Key, g => g.First());
+    }
+
+    private async Task QueueAsync(Guid configurationId)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var queue = scope.ServiceProvider.GetRequiredService<Cicd.Core.Builds.BuildQueueService>();
+        await queue.QueueAsync(new Cicd.Core.Builds.QueueBuildCommand(configurationId, TriggeredBy: "manual (ui)"), CancellationToken.None);
+        await LoadAsync();
+    }
+
+    private void OnBuildUpdated(BuildDto build)
+    {
+        if (build.ProjectId == Id)
+        {
+            _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+        }
+    }
+
+    public void Dispose() => Events.BuildUpdated -= OnBuildUpdated;
+}

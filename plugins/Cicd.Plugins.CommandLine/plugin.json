@@ -1,0 +1,8 @@
+{
+  "id": "command-line",
+  "name": "Command Line",
+  "version": "1.0.0",
+  "description": "Runs a shell script or an executable with arguments.",
+  "assembly": "Cicd.Plugins.CommandLine.dll",
+  "sides": ["server", "agent"]
+}

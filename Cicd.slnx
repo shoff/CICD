@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Cicd.Contracts/Cicd.Contracts.csproj" />
+    <Project Path="src/Cicd.Plugins.Sdk/Cicd.Plugins.Sdk.csproj" />
+    <Project Path="src/Cicd.Core/Cicd.Core.csproj" />
+    <Project Path="src/Cicd.Data/Cicd.Data.csproj" />
+    <Project Path="src/Cicd.Server/Cicd.Server.csproj" />
+    <Project Path="src/Cicd.Agent/Cicd.Agent.csproj" />
+  </Folder>
+  <Folder Name="/plugins/">
+    <Project Path="plugins/Cicd.Plugins.CommandLine/Cicd.Plugins.CommandLine.csproj" />
+    <Project Path="plugins/Cicd.Plugins.DotNet/Cicd.Plugins.DotNet.csproj" />
+    <Project Path="plugins/Cicd.Plugins.Git/Cicd.Plugins.Git.csproj" />
+    <Project Path="plugins/Cicd.Plugins.GitHub/Cicd.Plugins.GitHub.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Cicd.Core.Tests/Cicd.Core.Tests.csproj" />
+  </Folder>
+</Solution>

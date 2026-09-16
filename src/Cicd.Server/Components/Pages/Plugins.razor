@@ -1,0 +1,57 @@
+@page "/plugins"
+@inject Cicd.Core.Plugins.PluginCatalog Catalog
+@inject IEnumerable<Cicd.Plugins.Sdk.IBuildStepType> StepTypes
+@inject IEnumerable<Cicd.Plugins.Sdk.IBuildTrigger> Triggers
+@inject IEnumerable<Cicd.Plugins.Sdk.IVcsProvider> VcsProviders
+@inject IEnumerable<Cicd.Plugins.Sdk.IPullRequestProvider> PullRequestProviders
+
+<PageTitle>Plugins - CICD</PageTitle>
+<h1>Plugins</h1>
+
+@if (Catalog.Failures.Count > 0)
+{
+    <div class="error">
+        <strong>Failed to load:</strong>
+        <ul>@foreach (var f in Catalog.Failures) { <li>@f</li> }</ul>
+    </div>
+}
+
+<table>
+    <thead><tr><th>Id</th><th>Name</th><th>Version</th><th>Sides</th><th>Server-side contributions</th></tr></thead>
+    <tbody>
+    @foreach (var p in Catalog.Plugins)
+    {
+        <tr>
+            <td><code>@p.Manifest.Id</code></td>
+            <td>@p.Manifest.Name<br /><span class="muted">@p.Manifest.Description</span></td>
+            <td>@p.Manifest.Version</td>
+            <td>@p.Manifest.Sides</td>
+            <td>@string.Join(", ", p.Contributions)</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+<h2>Step types</h2>
+@foreach (var t in StepTypes.OrderBy(t => t.Id))
+{
+    <details>
+        <summary><code>@t.Id</code> - @t.DisplayName</summary>
+        <p class="muted">@t.Description</p>
+        <dl class="facts small">
+        @foreach (var p in t.Parameters)
+        {
+            <dt>@p.Name@(p.Required ? " *" : "")</dt><dd>@p.DisplayName <span class="muted">@p.Description</span></dd>
+        }
+        </dl>
+    </details>
+}
+
+<h2>Triggers</h2>
+<ul class="list">@foreach (var t in Triggers) { <li><code>@t.TypeId</code> - @t.DisplayName</li> }</ul>
+
+<h2>VCS providers</h2>
+<ul class="list">@foreach (var p in VcsProviders) { <li><code>@p.Id</code> - @p.DisplayName</li> }</ul>
+
+<h2>Pull request providers</h2>
+<ul class="list">@foreach (var p in PullRequestProviders) { <li><code>@p.Id</code> - @p.DisplayName</li> }</ul>

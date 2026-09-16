@@ -1,0 +1,8 @@
+{
+  "id": "github",
+  "name": "GitHub",
+  "version": "1.0.0",
+  "description": "Pull request discovery, commit status publishing, and push/pull_request webhooks for GitHub.",
+  "assembly": "Cicd.Plugins.GitHub.dll",
+  "sides": ["server"]
+}

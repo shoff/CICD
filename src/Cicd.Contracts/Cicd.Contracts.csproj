@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Wire types shared by the CICD server, build agents, and API clients.</Description>
+  </PropertyGroup>
+</Project>

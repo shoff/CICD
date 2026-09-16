@@ -1,0 +1,121 @@
+@page "/builds/{Id:guid}"
+@implements IDisposable
+@inject IDbContextFactory<CicdDbContext> DbFactory
+@inject IServiceScopeFactory Scopes
+@inject BuildEventStream Events
+@inject IJSRuntime Js
+
+<PageTitle>Build @(build?.Number) - CICD</PageTitle>
+
+@if (build is null)
+{
+    <h1>Build not found</h1>
+}
+else
+{
+    <h1>@build.ProjectName / @build.BuildConfigurationName #@build.Number <StatusBadge Status="build.Status" /></h1>
+    <dl class="facts">
+        <dt>Status</dt><dd>@build.StatusText</dd>
+        <dt>Branch</dt><dd>@build.Branch</dd>
+        <dt>Revision</dt><dd><code>@build.Revision</code></dd>
+        <dt>Agent</dt><dd>@(build.AgentName ?? "-")</dd>
+        <dt>Triggered by</dt><dd>@build.TriggeredBy</dd>
+        <dt>Queued</dt><dd>@build.QueuedAt.LocalDateTime</dd>
+        <dt>Started</dt><dd>@build.StartedAt?.LocalDateTime</dd>
+        <dt>Finished</dt><dd>@build.FinishedAt?.LocalDateTime</dd>
+    </dl>
+    @if (!build.Status.IsFinished())
+    {
+        <button @onclick="CancelAsync">Cancel</button>
+    }
+
+    <h2>Steps</h2>
+    <ol class="steps">
+    @foreach (var s in steps)
+    {
+        <li class="step-@s.Status.ToString().ToLowerInvariant()">@s.Name <span class="muted">(@s.TypeId)</span> - @s.Status @s.StatusText</li>
+    }
+    </ol>
+
+    @if (artifacts.Count > 0)
+    {
+        <h2>Artifacts</h2>
+        <ul class="list">
+        @foreach (var a in artifacts)
+        {
+            <li><a href="/api/v1/builds/@Id/artifacts/@a.Path">@a.Path</a> <span class="muted">@a.SizeBytes.ToString("N0") bytes</span></li>
+        }
+        </ul>
+    }
+
+    <h2>Log <a class="muted small" href="/api/v1/builds/@Id/log.txt" target="_blank">raw</a></h2>
+    <pre class="log" id="build-log">@foreach (var line in log)
+{<span class="log-@line.Level.ToString().ToLowerInvariant()">@line.Timestamp.LocalDateTime.ToString("HH:mm:ss") @line.Text</span>
+}</pre>
+}
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private BuildDto? build;
+    private List<BuildStepRun> steps = [];
+    private List<ArtifactDto> artifacts = [];
+    private readonly List<LogLine> log = [];
+    private long lastSequence = -1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        Events.BuildUpdated += OnBuildUpdated;
+        Events.BuildLog += OnBuildLog;
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var entity = await db.Builds.AsNoTracking().Include(b => b.BuildConfiguration!).ThenInclude(c => c.Project).Include(b => b.Agent).FirstOrDefaultAsync(b => b.Id == Id);
+        if (entity is null) { build = null; return; }
+        build = entity.ToDto();
+        steps = entity.StepRuns;
+        artifacts = (await db.BuildArtifacts.AsNoTracking().Where(a => a.BuildId == Id).OrderBy(a => a.Path).ToListAsync()).Select(a => a.ToDto()).ToList();
+        var lines = await db.BuildLogLines.AsNoTracking().Where(l => l.BuildId == Id && l.Sequence > lastSequence).OrderBy(l => l.Sequence).ToListAsync();
+        foreach (var l in lines)
+        {
+            log.Add(new LogLine { Sequence = l.Sequence, Timestamp = l.Timestamp, Level = l.Level, StepIndex = l.StepIndex, Text = l.Text });
+            lastSequence = l.Sequence;
+        }
+    }
+
+    private void OnBuildUpdated(BuildDto updated)
+    {
+        if (updated.Id != Id) return;
+        _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    private void OnBuildLog(Guid buildId, IReadOnlyList<LogLine> lines)
+    {
+        if (buildId != Id) return;
+        _ = InvokeAsync(async () =>
+        {
+            foreach (var line in lines.Where(l => l.Sequence > lastSequence).OrderBy(l => l.Sequence))
+            {
+                log.Add(line);
+                lastSequence = line.Sequence;
+            }
+            StateHasChanged();
+            try { await Js.InvokeVoidAsync("cicd.scrollLog"); } catch { /* prerender or disposed circuit */ }
+        });
+    }
+
+    private async Task CancelAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        var queue = scope.ServiceProvider.GetRequiredService<Cicd.Core.Builds.BuildQueueService>();
+        await queue.CancelAsync(Id, "ui", CancellationToken.None);
+    }
+
+    public void Dispose()
+    {
+        Events.BuildUpdated -= OnBuildUpdated;
+        Events.BuildLog -= OnBuildLog;
+    }
+}

@@ -1,0 +1,94 @@
+@page "/"
+@implements IDisposable
+@inject IDbContextFactory<CicdDbContext> DbFactory
+@inject BuildEventStream Events
+
+<PageTitle>Overview - CICD</PageTitle>
+<h1>Overview</h1>
+
+<section class="cards">
+    <div class="card"><div class="metric">@running.Count</div><div>running</div></div>
+    <div class="card"><div class="metric">@queued.Count</div><div>queued</div></div>
+    <div class="card"><div class="metric">@agentsOnline / @agentsTotal</div><div>agents online</div></div>
+</section>
+
+<h2>Active builds</h2>
+@if (running.Count == 0 && queued.Count == 0)
+{
+    <p class="muted">Nothing is running. Queue a build from a project page.</p>
+}
+else
+{
+    <table>
+        <thead><tr><th>Build</th><th>Status</th><th>Branch</th><th>Agent</th><th>Triggered by</th><th>Queued</th></tr></thead>
+        <tbody>
+        @foreach (var b in running.Concat(queued))
+        {
+            <tr>
+                <td><a href="/builds/@b.Id">@b.ProjectName / @b.BuildConfigurationName #@b.Number</a></td>
+                <td><StatusBadge Status="b.Status" /> <span class="muted">@b.StatusText</span></td>
+                <td>@b.Branch</td>
+                <td>@(b.AgentName ?? "-")</td>
+                <td>@b.TriggeredBy</td>
+                <td>@b.QueuedAt.LocalDateTime.ToString("g")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
+
+<h2>Recent builds</h2>
+<table>
+    <thead><tr><th>Build</th><th>Status</th><th>Branch</th><th>Agent</th><th>Finished</th><th>Duration</th></tr></thead>
+    <tbody>
+    @foreach (var b in recent)
+    {
+        <tr>
+            <td><a href="/builds/@b.Id">@b.ProjectName / @b.BuildConfigurationName #@b.Number</a></td>
+            <td><StatusBadge Status="b.Status" /></td>
+            <td>@b.Branch</td>
+            <td>@(b.AgentName ?? "-")</td>
+            <td>@b.FinishedAt?.LocalDateTime.ToString("g")</td>
+            <td>@Duration(b)</td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private List<BuildDto> running = [];
+    private List<BuildDto> queued = [];
+    private List<BuildDto> recent = [];
+    private int agentsOnline;
+    private int agentsTotal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        Events.BuildUpdated += OnBuildUpdated;
+        Events.AgentUpdated += OnAgentUpdated;
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var builds = db.Builds.AsNoTracking().Include(b => b.BuildConfiguration!).ThenInclude(c => c.Project).Include(b => b.Agent);
+        running = (await builds.Where(b => b.Status == BuildStatus.Running).OrderBy(b => b.StartedAt).ToListAsync()).Select(b => b.ToDto()).ToList();
+        queued = (await builds.Where(b => b.Status == BuildStatus.Queued).OrderBy(b => b.QueuedAt).ToListAsync()).Select(b => b.ToDto()).ToList();
+        recent = (await builds.Where(b => b.Status != BuildStatus.Running && b.Status != BuildStatus.Queued).OrderByDescending(b => b.FinishedAt).Take(20).ToListAsync()).Select(b => b.ToDto()).ToList();
+        agentsTotal = await db.Agents.CountAsync();
+        agentsOnline = await db.Agents.CountAsync(a => a.LastSeenAt > DateTimeOffset.UtcNow.AddMinutes(-2));
+    }
+
+    private void OnBuildUpdated(BuildDto build) => _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    private void OnAgentUpdated(AgentDto agent) => _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    private static string Duration(BuildDto b) =>
+        b.StartedAt is { } s && b.FinishedAt is { } f ? (f - s).ToString(@"mm\:ss") : "-";
+
+    public void Dispose()
+    {
+        Events.BuildUpdated -= OnBuildUpdated;
+        Events.AgentUpdated -= OnAgentUpdated;
+    }
+}

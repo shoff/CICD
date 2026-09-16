@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PluginId>dotnet</PluginId>
+  </PropertyGroup>
+</Project>

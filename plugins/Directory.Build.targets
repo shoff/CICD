@@ -1,0 +1,13 @@
+<Project>
+  <!--
+    After every plugin build, mirror its output into artifacts/plugins/<PluginId>/ so the server and agent
+    can discover it with the development-layout fallback in PluginDirectoryLocator, and so the Dockerfiles
+    have a single folder to copy.
+  -->
+  <Target Name="PublishPluginToArtifacts" AfterTargets="Build" Condition="'$(PluginId)' != ''">
+    <ItemGroup>
+      <PluginOutputFiles Include="$(OutDir)**/*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PluginOutputFiles)" DestinationFiles="@(PluginOutputFiles->'$(PluginsOutputRoot)$(PluginId)/%(RecursiveDir)%(Filename)%(Extension)')" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

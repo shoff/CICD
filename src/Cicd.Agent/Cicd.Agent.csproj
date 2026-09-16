@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Worker">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UserSecretsId>cicd-agent</UserSecretsId>
+    <Description>CICD build agent. Runs as a separate process / container and executes builds dispatched by the server.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Cicd.Contracts/Cicd.Contracts.csproj" />
+    <ProjectReference Include="../Cicd.Plugins.Sdk/Cicd.Plugins.Sdk.csproj" />
+    <ProjectReference Include="../Cicd.Core/Cicd.Core.csproj" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Http" />
+    <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" />
+    <PackageReference Include="Microsoft.Extensions.FileSystemGlobbing" />
+  </ItemGroup>
+</Project>

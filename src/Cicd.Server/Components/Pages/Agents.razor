@@ -1,0 +1,61 @@
+@page "/agents"
+@implements IDisposable
+@inject IDbContextFactory<CicdDbContext> DbFactory
+@inject IServiceScopeFactory Scopes
+@inject BuildEventStream Events
+@inject Cicd.Core.Agents.AgentConnectionRegistry Connections
+
+<PageTitle>Agents - CICD</PageTitle>
+<h1>Agents</h1>
+<p class="muted">New agents connect unauthorized and receive no work until you authorize them here.</p>
+
+<table>
+    <thead><tr><th>Name</th><th>Connected</th><th>Authorized</th><th>Enabled</th><th>Current build</th><th>Last seen</th><th>Capabilities</th></tr></thead>
+    <tbody>
+    @foreach (var a in agents)
+    {
+        <tr>
+            <td>@a.Name <span class="muted">@a.Version</span></td>
+            <td>@(a.Connected ? "yes" : "no")</td>
+            <td><button @onclick="() => AuthorizeAsync(a.Id, !a.Authorized)">@(a.Authorized ? "Revoke" : "Authorize")</button></td>
+            <td><button @onclick="() => EnableAsync(a.Id, !a.Enabled)">@(a.Enabled ? "Disable" : "Enable")</button></td>
+            <td>@if (a.CurrentBuildId is { } id) { <a href="/builds/@id">view</a> } else { <span>-</span> }</td>
+            <td>@a.LastSeenAt?.LocalDateTime.ToString("g")</td>
+            <td><details><summary>@a.Capabilities.Count</summary><dl class="facts small">@foreach (var kv in a.Capabilities.OrderBy(k => k.Key)) { <dt>@kv.Key</dt><dd>@kv.Value</dd> }</dl></details></td>
+        </tr>
+    }
+    </tbody>
+</table>
+
+@code {
+    private List<AgentDto> agents = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+        Events.AgentUpdated += OnAgentUpdated;
+    }
+
+    private async Task LoadAsync()
+    {
+        await using var db = await DbFactory.CreateDbContextAsync();
+        agents = (await db.Agents.AsNoTracking().OrderBy(a => a.Name).ToListAsync()).Select(a => a.ToDto(Connections.IsConnected(a.Id))).ToList();
+    }
+
+    private async Task AuthorizeAsync(Guid id, bool authorized)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<Cicd.Core.Agents.AgentService>().SetAuthorizedAsync(id, authorized, CancellationToken.None);
+        await LoadAsync();
+    }
+
+    private async Task EnableAsync(Guid id, bool enabled)
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<Cicd.Core.Agents.AgentService>().SetEnabledAsync(id, enabled, CancellationToken.None);
+        await LoadAsync();
+    }
+
+    private void OnAgentUpdated(AgentDto agent) => _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    public void Dispose() => Events.AgentUpdated -= OnAgentUpdated;
+}

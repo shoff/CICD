@@ -1,0 +1,71 @@
+# Local stack: PostgreSQL, the server, and two agents (one base, one with the .NET SDK).
+# Copy .env.example to .env and set real secrets before running.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: cicd
+      POSTGRES_USER: cicd
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cicd}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cicd -d cicd"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  server:
+    build:
+      context: .
+      dockerfile: docker/server.Dockerfile
+    image: cicd-server:latest
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      ConnectionStrings__Cicd: "Host=postgres;Port=5432;Database=cicd;Username=cicd;Password=${POSTGRES_PASSWORD:-cicd}"
+      Server__PublicUrl: ${SERVER_PUBLIC_URL:-http://localhost:8080}
+      Agents__AuthToken: ${AGENT_AUTH_TOKEN:?set AGENT_AUTH_TOKEN in .env}
+      Agents__AutoAuthorize: ${AGENT_AUTO_AUTHORIZE:-false}
+      Security__ApiToken: ${API_TOKEN:-}
+      GitHub__Token: ${GITHUB_TOKEN:-}
+      GitHub__WebhookSecret: ${GITHUB_WEBHOOK_SECRET:-}
+    volumes:
+      - server-data:/data
+
+  agent:
+    build:
+      context: .
+      dockerfile: docker/agent.Dockerfile
+    image: cicd-agent:latest
+    depends_on:
+      - server
+    environment:
+      Agent__ServerUrl: http://server:8080
+      Agent__Name: agent-1
+      Agent__AuthToken: ${AGENT_AUTH_TOKEN:?set AGENT_AUTH_TOKEN in .env}
+    volumes:
+      - agent-work:/work
+
+  agent-dotnet:
+    build:
+      context: .
+      dockerfile: docker/agent-dotnet.Dockerfile
+    image: cicd-agent-dotnet:latest
+    depends_on:
+      - agent
+    environment:
+      Agent__ServerUrl: http://server:8080
+      Agent__Name: agent-dotnet-1
+      Agent__AuthToken: ${AGENT_AUTH_TOKEN:?set AGENT_AUTH_TOKEN in .env}
+    volumes:
+      - agent-dotnet-work:/work
+
+volumes:
+  postgres-data:
+  server-data:
+  agent-work:
+  agent-dotnet-work:
