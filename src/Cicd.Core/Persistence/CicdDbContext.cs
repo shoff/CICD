@@ -19,6 +19,7 @@ public class CicdDbContext(DbContextOptions options) : DbContext(options)
     public DbSet<Agent> Agents => Set<Agent>();
     public DbSet<PullRequest> PullRequests => Set<PullRequest>();
     public DbSet<TriggerStateEntry> TriggerState => Set<TriggerStateEntry>();
+    public DbSet<User> Users => Set<User>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -95,6 +96,14 @@ public class CicdDbContext(DbContextOptions options) : DbContext(options)
         {
             entity.ToTable("trigger_state");
             entity.HasKey(t => new { t.BuildConfigurationId, t.TriggerIndex, t.Key });
+        });
+
+        modelBuilder.Entity<User>(entity =>
+        {
+            entity.ToTable("users");
+            entity.HasIndex(u => new { u.Issuer, u.Subject }).IsUnique();
+            entity.HasIndex(u => u.Email);
+            entity.Property(u => u.Role).HasConversion<string>().HasMaxLength(16);
         });
     }
 
