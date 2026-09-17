@@ -1,6 +1,7 @@
 using Cicd.Core.Agents;
 using Cicd.Core.Builds;
 using Cicd.Core.PullRequests;
+using Cicd.Core.Settings;
 using Cicd.Core.Triggers;
 using Cicd.Core.Users;
 using Cicd.Plugins.Sdk;
@@ -18,6 +19,7 @@ public static class CoreServiceCollectionExtensions
         services.Configure<CicdServerOptions>(configuration.GetSection(CicdServerOptions.SectionName));
         services.Configure<SecurityOptions>(configuration.GetSection(SecurityOptions.SectionName));
         services.AddScoped<UserService>();
+        services.AddScoped<SettingsService>();
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<IBuildEventPublisher, NullBuildEventPublisher>();
         services.AddSingleton<AgentConnectionRegistry>();
