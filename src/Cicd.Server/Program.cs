@@ -26,22 +26,30 @@ var secretProtector = new DataProtectionSecretProtector(
 using (var startupLoggers = LoggerFactory.Create(l => l.AddSimpleConsole()))
 {
     var startupLogger = startupLoggers.CreateLogger("Startup");
-    if (builder.Configuration.GetValue("Server:MigrateOnStartup", true))
+    try
     {
-        startupLogger.LogInformation("Applying database migrations");
-        await DatabaseStartup.MigrateAsync(connectionString);
+        if (builder.Configuration.GetValue("Server:MigrateOnStartup", true))
+        {
+            startupLogger.LogInformation("Applying database migrations");
+            await DatabaseStartup.MigrateAsync(connectionString);
+        }
+        var seeded = await DatabaseStartup.SeedSettingsAsync(connectionString, builder.Configuration, secretProtector);
+        if (seeded > 0)
+        {
+            startupLogger.LogInformation("Seeded {Count} settings from configuration", seeded);
+        }
+        var encrypted = await DatabaseStartup.EncryptLegacyVcsRootsAsync(connectionString, secretProtector);
+        if (encrypted > 0)
+        {
+            startupLogger.LogInformation("Encrypted {Count} VCS root credential sets", encrypted);
+        }
     }
-    var seeded = await DatabaseStartup.SeedSettingsAsync(connectionString, builder.Configuration, secretProtector);
-    if (seeded > 0)
+    catch (Exception ex)
     {
-        startupLogger.LogInformation("Seeded {Count} settings from configuration", seeded);
+        startupLogger.LogCritical(ex, "Cannot reach the database at startup ({Message})", ex.Message);
+        throw;
     }
-    var encrypted = await DatabaseStartup.EncryptLegacyVcsRootsAsync(connectionString, secretProtector);
-    if (encrypted > 0)
-    {
-        startupLogger.LogInformation("Encrypted {Count} VCS root credential sets", encrypted);
-    }
-    var settingsSource = new DatabaseSettingsConfigurationSource(connectionString, secretProtector);
+    var settingsSource = new DatabaseSettingsConfigurationSource(connectionString, secretProtector, startupLoggers.CreateLogger("Settings"));
     builder.Configuration.Sources.Add(settingsSource);
     builder.Services.AddSingleton<ISecretProtector>(secretProtector);
     builder.Services.AddSingleton<ISettingsReloader>(settingsSource.Provider);

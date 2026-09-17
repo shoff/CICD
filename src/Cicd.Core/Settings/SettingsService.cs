@@ -42,8 +42,10 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
                 }
             }
             var isSet = value.Length > 0;
+            // Booleans are compared case-insensitively: configuration renders JSON booleans as "True"/"False".
+            var comparison = definition.Kind == SettingKind.Boolean ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
             var restartPending = definition.RestartRequired
-                && !string.Equals(value, StartupValue(definition), StringComparison.Ordinal);
+                && !string.Equals(value, StartupValue(definition), comparison);
             var shown = definition.Kind == SettingKind.Secret ? (isSet ? Mask : "") : value;
             views.Add(new SettingView(definition, shown, isSet, restartPending, unreadable));
         }

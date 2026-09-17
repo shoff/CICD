@@ -104,6 +104,17 @@ public class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Restart_pending_ignores_boolean_casing()
+    {
+        reloader.Startup["IdentityProvider:ValidateAudience"] = "False";
+        await using var db = testDb.Create();
+        db.Settings.Add(new Setting { Key = "IdentityProvider:ValidateAudience", Value = "false" });
+        await db.SaveChangesAsync();
+        var views = await Service(db).GetAllAsync(CancellationToken.None);
+        Assert.False(views.Single(v => v.Definition.Key == "IdentityProvider:ValidateAudience").RestartPending);
+    }
+
+    [Fact]
     public async Task Restart_pending_compares_lists_against_the_joined_startup_value()
     {
         reloader.Startup["Plugins:Disabled:0"] = "a";

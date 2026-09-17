@@ -19,9 +19,13 @@ public static class SettingsSeeder
             {
                 continue;
             }
-            var value = definition.Kind == SettingKind.List
-                ? SettingsConfigurationMapper.JoinList(configuration.GetSection(definition.Key).GetChildren().Select(c => c.Value ?? ""))
-                : configuration[definition.Key] ?? "";
+            var value = definition.Kind switch
+            {
+                SettingKind.List => SettingsConfigurationMapper.JoinList(configuration.GetSection(definition.Key).GetChildren().Select(c => c.Value ?? "")),
+                // JSON booleans arrive as "True"/"False"; store the casing UpdateAsync writes so comparisons stay ordinal.
+                SettingKind.Boolean when bool.TryParse(configuration[definition.Key], out var flag) => flag ? "true" : "false",
+                _ => configuration[definition.Key] ?? "",
+            };
             var isSecret = definition.Kind == SettingKind.Secret;
             rows.Add(new Setting
             {

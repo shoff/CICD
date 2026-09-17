@@ -24,6 +24,15 @@ public class SettingsSeederTests
     }
 
     [Fact]
+    public void Booleans_seed_in_the_same_casing_the_service_writes()
+    {
+        var config = Config(("Agents:AutoAuthorize", "True"));
+        var rows = SettingsSeeder.MissingRows(config, [], new ReversingProtector(), new TestClock());
+        Assert.Equal("true", rows.Single(r => r.Key == "Agents:AutoAuthorize").Value);
+        Assert.Equal("", rows.Single(r => r.Key == "IdentityProvider:ValidateAudience").Value);
+    }
+
+    [Fact]
     public void Missing_configuration_seeds_an_empty_value_and_arrays_are_joined()
     {
         var config = Config(("Security:BootstrapAdmins:0", "a@x.com"), ("Security:BootstrapAdmins:1", "b@x.com"));
