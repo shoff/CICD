@@ -1,5 +1,6 @@
 using Cicd.Core.Persistence;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Cicd.Data;
@@ -34,6 +35,7 @@ public static class PostgresServiceCollectionExtensions
             npgsql.EnableRetryOnFailure(maxRetryCount: 5);
         });
         options.UseSnakeCaseNamingConvention();
+        options.ReplaceService<IModelCacheKeyFactory, ProtectorModelCacheKeyFactory>();
     }
 
     private sealed class ContextFactoryAdapter(IDbContextFactory<PostgresCicdDbContext> inner) : IDbContextFactory<CicdDbContext>
