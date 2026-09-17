@@ -57,8 +57,14 @@ ASPNETCORE_ENVIRONMENT=Development Agents__AuthToken=dev-token dotnet run --proj
 Agent__AuthToken=dev-token Agent__Name=local-1 dotnet run --project src/Cicd.Agent
 ```
 
-In the Development environment `appsettings.Development.json` points at identity-dev and requires a sign-in; pass
-`IdentityProvider__Authority=` (empty) to run in open mode as the curl examples below assume.
+The first start against an empty database seeds the managed settings from configuration (see
+[Configuration](#configuration)), so `Agents__AuthToken` above only has an effect on that first run. After that the
+token lives in the `settings` table; change it on Admin -> Settings (or via the API).
+
+In the Development environment `appsettings.Development.json` points at identity-dev and requires a sign-in. To run in
+open mode as the curl examples below assume, clear the authority on Admin -> Settings (or with
+`PUT /api/v1/settings`) and restart the server; setting `IdentityProvider__Authority=` in the environment only has an
+effect on the very first start.
 
 Migrations run automatically on server start (`Server:MigrateOnStartup`). The Development environment auto-authorizes agents.
 
@@ -85,32 +91,75 @@ Watch it on `/builds`, or follow the log with `GET $API/builds/{id}/log?after=-1
 
 ## Configuration
 
-All settings are `appsettings.json` keys and can be set as environment variables with `__` separators.
+Configuration lives in two places.
+
+**Startup keys** are needed before the database can be read, so they stay in `appsettings.json` or the environment
+(`__` separators, e.g. `ConnectionStrings__Cicd`):
 
 | Key | Meaning |
 | --- | --- |
-| `ConnectionStrings:Cicd` | PostgreSQL connection string. |
-| `Agents:AuthToken` | Shared secret agents must present. Required. |
-| `Agents:AutoAuthorize` | Authorize agents on first registration. Development only. |
-| `Security:ApiToken` | Static bearer token that acts as an admin. Break-glass and automation. Empty disables it. |
-| `Security:BootstrapAdmins` | Emails promoted to admin on every sign-in. Set at least one before the first login. |
-| `IdentityProvider:Authority` | Issuer base URL of the company identity provider. Empty runs the server in open mode (no login; UI and API open unless `Security:ApiToken` is set). |
-| `IdentityProvider:LoginUrl` | The username/password endpoint. Empty derives `{Authority}/api/v21/accountv21/login`. |
-| `IdentityProvider:ReturnUrl` | Sent to the login endpoint as `ReturnUrl`; it requires a value but CICD never follows it. |
-| `IdentityProvider:ValidateAudience` / `IdentityProvider:Audience` | Audience validation for bearer JWTs. Off until the IdP has an API resource for CICD. |
-| `IdentityProvider:RequireHttpsMetadata` | Default `true`. Requires https for the login endpoint and the discovery document. Turning it off also allows credentials to be posted over plain http. |
-| `IdentityProvider:TimeoutSeconds` | Default `15`. Timeout for the call to the login endpoint. |
-| `Server:PublicUrl` | Used in commit status links. |
-| `Server:DataDirectory` | Where artifacts are stored. |
-| `Server:*IntervalSeconds` | Dispatch, trigger poll, and pull request poll cadence. |
-| `GitHub:Token` | Default token for pull request discovery and status publishing. A VCS root property `github.token` overrides it. |
-| `GitHub:WebhookSecret` | If set, webhooks must carry a valid `X-Hub-Signature-256`. |
-| `Plugins:Directory` / `Plugins:Disabled` | Plugin root and ids to skip. |
+| `ConnectionStrings:Cicd` | PostgreSQL connection string. Required. |
+| `Server:DataDirectory` | Artifacts, and the Data Protection key ring in `<Server:DataDirectory>/keys`. |
+| `Server:MigrateOnStartup` | Apply EF Core migrations on start. Default `true`. |
+| `Plugins:Directory` | Plugin root scanned at startup. |
+| `Logging:*` | Log levels. |
+| `ASPNETCORE_URLS` (or `--urls`) | Listen addresses. |
+
+**Managed settings** live in the `settings` table. On the first start every managed key that has no row yet is seeded
+from the current configuration (`appsettings.json`, `appsettings.<Environment>.json`, environment variables). From then
+on the database wins: **changing a managed key through the environment or `appsettings` has no effect** - the database
+configuration source is added last and overrides both. Edit them at Admin -> Settings (admins only) or through
+`GET /api/v1/settings` and `PUT /api/v1/settings`. Changes apply immediately unless the Restart column says otherwise;
+the settings page shows a banner while a restart is pending.
+
+Because seeding only happens once, `appsettings.Development.json` (identity-dev authority, the bootstrap admin,
+auto-authorize) only matters on the very first start against an empty database.
+
+### Managed settings
+
+| Key | Meaning | Restart |
+| --- | --- | --- |
+| `Server:PublicUrl` | Used in commit status links. | no |
+| `Server:DispatchIntervalSeconds` | How often queued builds are assigned to agents. | no |
+| `Server:TriggerPollIntervalSeconds` | How often VCS and other triggers are polled. | no |
+| `Server:PullRequestPollIntervalSeconds` | How often open pull requests are refreshed. | no |
+| `Agents:AuthToken` | Shared secret agents must present. Secret. | no |
+| `Agents:AutoAuthorize` | Authorize agents on first registration. Development only. | no |
+| `Security:ApiToken` | Static bearer token that acts as an admin. Break-glass and automation. Empty disables it. Secret. | no |
+| `Security:BootstrapAdmins` | Emails promoted to admin on every sign-in. Set at least one before the first login. | no |
+| `IdentityProvider:Authority` | Issuer base URL of the company identity provider. Empty runs the server in open mode (no login; UI and API open unless `Security:ApiToken` is set). | **yes** |
+| `IdentityProvider:LoginUrl` | The username/password endpoint. Empty derives `{Authority}/api/v21/accountv21/login`. | no |
+| `IdentityProvider:ReturnUrl` | Sent to the login endpoint as `ReturnUrl`; it requires a value but CICD never follows it. | no |
+| `IdentityProvider:ValidateAudience` | Validate the audience of API bearer tokens. Off until the IdP has an API resource for CICD. | **yes** |
+| `IdentityProvider:Audience` | Expected audience when validation is on. | **yes** |
+| `IdentityProvider:RequireHttpsMetadata` | Default `true`. Requires https for the login endpoint and the discovery document. Turning it off also allows credentials to be posted over plain http. | **yes** |
+| `IdentityProvider:TimeoutSeconds` | Default `15`. Timeout for the call to the login endpoint. | no |
+| `GitHub:Token` | Default token for pull request discovery and status publishing. A VCS root property `github.token` overrides it. Secret. | no |
+| `GitHub:WebhookSecret` | If set, webhooks must carry a valid `X-Hub-Signature-256`. Secret. | no |
+| `GitHub:ApiBaseUrl` | GitHub REST API base. | no |
+| `Plugins:Disabled` | Plugin ids to skip even if present on disk. | **yes** |
+
+The keys marked **yes** are read once while the authentication handlers and the plugin host are built; everything else
+is read through `IOptionsMonitor` and picks up a change on the next request or the next background tick.
+
+### Secrets at rest
+
+Settings marked secret above, and VCS root properties (`vcs_roots.properties`), are encrypted with ASP.NET Core Data
+Protection before they are written. The API and the settings page never return a stored secret: they report only
+whether one is set.
+
+The key ring is a set of XML files in `<Server:DataDirectory>/keys`, **unencrypted on disk** (there is no DPAPI on
+Linux and no certificate is configured), so protect that directory with filesystem permissions and **back it up with
+the data directory**. It is load-bearing: without the matching keys every stored secret and every VCS root credential
+becomes unreadable and has to be re-entered. The server logs one error per unreadable key at startup
+(`Setting {Key} cannot be decrypted; it is ignored until re-entered`) and the settings page shows `unreadable,
+re-enter` in the field.
 
 The former `Oidc` section is gone. Set `IdentityProvider:Authority`; with it empty the server runs in open mode (or
 token-only mode when `Security:ApiToken` is set).
 
 Agent: `Agent:ServerUrl`, `Agent:Name`, `Agent:AuthToken`, `Agent:WorkDirectory`, `Agent:Capabilities` (extra key/values).
+The agent has no database, so all of its configuration is `appsettings`/environment.
 
 ## Users and roles
 
@@ -128,10 +177,11 @@ created with the `viewer` role; emails listed in `Security:BootstrapAdmins` beco
 
 Admins change roles on `/users` or with `PUT /api/v1/users/{id}/role`. Changes apply on the next request.
 API clients send an IdP access token as `Authorization: Bearer <jwt>`; the same local user and role apply.
-`Security:ApiToken` is a static admin credential for automation. Agents use `Agents:AuthToken` only.
+`Security:ApiToken` is a static admin credential for automation; set it on Admin -> Settings (or via the API),
+because an environment value only seeds the very first start. Agents use `Agents:AuthToken` only.
 Until an API resource for CICD exists at the IdP and `IdentityProvider:ValidateAudience` is on, any access token identity-dev
 issued to any application authenticates to CICD as that user. Enable audience validation as soon as the resource
-is registered.
+is registered; the audience keys need a server restart to take effect.
 
 Behind a TLS-terminating proxy set `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true` on the server so cookies use the
 public `https` scheme. Outside the Development environment the session cookie is always marked `Secure`.
@@ -149,7 +199,8 @@ immediately instead of waiting for the poll.
 This is the scaffold, built so features can be added one at a time. Known gaps, in rough priority order:
 
 - **Per-project roles, groups, personal access tokens.** Roles are global for now.
-- **Secrets.** VCS root properties (tokens, passwords) are stored in plain jsonb. They are redacted in API responses but not encrypted at rest.
+- **Secret rotation.** Stored secrets and VCS root credentials are encrypted at rest with Data Protection, but the
+  key ring is unencrypted on disk and there is no re-encryption command if it is lost or rotated by hand.
 - **Build log storage.** Lines go into PostgreSQL. Fine for a team, wrong for very large logs; TeamCity uses files.
 - **Agent pools, build chains and snapshot dependencies, artifact dependencies, scheduled triggers, build history cleanup, notifications (email, Slack), test result parsing, code coverage, Windows agents (untested), Kubernetes agent autoscaling.**
 - **UI editing.** Projects can be created in the UI; VCS roots and build configurations are created through the API.

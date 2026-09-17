@@ -21,6 +21,7 @@ scaffold is in place; the intended workflow from here is "TeamCity does X, add X
 | Docker images and compose | **written, never built** | no Docker daemon in the authoring sandbox |
 | GitHub pull request polling and status publishing | **written, never exercised against GitHub** | no token; webhook signature verification is unit tested |
 | Users, roles, v21 login | code, unit tests and curl smoke done; **first real sign-in pending** | run in Development and sign in at /login |
+| Settings in database, secrets at rest | done | seeded 19 keys, PUT changed the agent token live, `vcs_roots.properties` is encrypted text |
 
 ## Layout
 
@@ -86,8 +87,9 @@ Migrations: `dotnet-ef` targets net8.0; with only the .NET 10 runtime installed 
 
 1. **Build the Docker images and run `docker compose up`.** Nobody has. Expect small path or apt issues, not design issues.
 2. **First real sign-in.** `dotnet run` in Development (appsettings.Development.json points at identity-dev and bootstraps shoff@manageamerica.com as admin), sign in at /login, confirm /users shows the admin, then verify an IdP access token against /api/v1/builds and /hubs/builds, and register an API resource + enable `IdentityProvider:ValidateAudience`.
-3. **Secrets at rest.** VCS root `Properties` (tokens, passwords) are plain jsonb. Redacted in API output only.
-   Add a data protection based encrypter in `Mapping`/`VcsRoot` persistence, or a dedicated `secrets` table.
+3. **Secrets at rest. Done** - see the status table above and "Settings and secrets" in `docs/ARCHITECTURE.md`.
+   What is left: no way to rotate or re-encrypt the Data Protection key ring, and no per-secret audit beyond
+   `settings.updated_by`.
 4. **UI editing** of VCS roots and build configurations. The API does it; the UI only creates projects and queues builds.
 5. **Scheduled trigger** (`IBuildTrigger` with cron; consider the Cronos package).
 6. **Agent pools**, then **build chains / snapshot dependencies**, then **artifact dependencies**.
@@ -102,6 +104,17 @@ Migrations: `dotnet-ef` targets net8.0; with only the .NET 10 runtime installed 
 - `plugins/Directory.Build.props` references the SDK with `Private=false` yet `Cicd.Contracts.dll` still lands in each
   plugin folder (transitive reference). Harmless: the load context prefers the host's copy by name.
 - `Agents:AuthToken` default is `change-me` in `appsettings.json`; the server logs a warning at startup if unchanged.
+- **`appsettings.Development.json` only matters on the first seed.** It sets the identity-dev authority, the bootstrap
+  admin and auto-authorize, but those are managed settings: once the `settings` rows exist the database source (added
+  last in `Program.cs`) overrides both the JSON files and the environment. Editing the file, or exporting
+  `IdentityProvider__Authority=`, changes nothing on a database that has already been seeded. Use Admin -> Settings or
+  `PUT /api/v1/settings` - or delete the row and restart if you want it re-seeded from configuration.
+- **The settings migration's `Down` is not reversible once VCS root rows are encrypted.**
+  `20260917004306_AddSettingsAndProtectVcsRootProperties` changes `vcs_roots.properties` from `jsonb` to `text`; the
+  `Down` casts it back with `properties::jsonb`, which fails on ciphertext. Rolling back means restoring a backup.
+- **`DatabaseStartup.EncryptLegacyVcsRootsAsync` runs on every boot**, not just once. It loads VCS roots, re-saves any
+  whose stored value has no `enc:v1:` prefix, and logs a count when it changed something. Steady state is a no-op (one
+  extra query per start), and it is what upgrades an existing database in place.
 - `PullRequestService.RefreshAsync` marks pull requests it no longer sees as `closed` locally. It never deletes rows.
 - The `github` plugin declares `"sides": ["server"]` only. There is no agent half; checkout of `refs/pull/N/head`
   is done by the `git` plugin.
@@ -117,3 +130,11 @@ Migrations: `dotnet-ef` targets net8.0; with only the .NET 10 runtime installed 
   Replaced the OIDC redirect flow with the IdP's v21 username/password login (same mechanism MAI uses) so no client
   registration is needed. The former `Oidc` section is gone: set `IdentityProvider:Authority`; with it empty the server
   runs in open mode (or token-only mode when `Security:ApiToken` is set).
+- 2026-09-16: settings moved into the database on branch `feature/database-settings` via
+  `.superpowers/sdd/2026-09-16-database-settings/`. Five tasks: secret protector + `settings` entity + catalog +
+  encrypted VCS root properties, the configuration source + seeder + `SettingsService`, the
+  `GET`/`PUT /api/v1/settings` endpoints, live `IOptionsMonitor` consumers, and the Admin area with the settings page.
+  Smoked against `cicd-postgres` in Development: 19 keys seeded from configuration, a `PUT` of `Agents:AuthToken` took
+  effect without a restart, and `vcs_roots.properties` is `enc:v1:`-prefixed text. The Data Protection key ring at
+  `<Server:DataDirectory>/keys` (`data/keys` by default) is unencrypted and load-bearing: back it up, or every stored
+  secret and VCS credential has to be re-entered.

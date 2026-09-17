@@ -6,10 +6,12 @@
         <NavLink href="/" Match="NavLinkMatch.All">Overview</NavLink>
         <NavLink href="/projects">Projects</NavLink>
         <NavLink href="/builds">Builds</NavLink>
-        <NavLink href="/agents">Agents</NavLink>
-        <NavLink href="/plugins">Plugins</NavLink>
         <AuthorizeView Policy="@Policies.Admin">
+            <div class="nav-group">Admin</div>
+            <NavLink href="/admin/settings">Settings</NavLink>
             <NavLink href="/users">Users</NavLink>
+            <NavLink href="/agents">Agents</NavLink>
+            <NavLink href="/plugins">Plugins</NavLink>
         </AuthorizeView>
         <a href="/api/docs" target="_blank" rel="noopener">API docs</a>
         <div class="sidebar-user">

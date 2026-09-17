@@ -67,7 +67,7 @@ Contribution kinds:
 PostgreSQL, snake_case, jsonb for the flexible parts. Tables: `projects`, `vcs_roots`, `build_configurations`
 (`steps`, `parameters`, `triggers`, `agent_requirements`, `artifact_paths`, `pull_requests` are jsonb), `builds`
 (`step_runs` jsonb), `build_log_lines`, `build_artifacts`, `agents` (`capabilities` jsonb), `pull_requests`,
-`trigger_state`. `CicdDbContext` in Core is provider-neutral; `PostgresCicdDbContext` in Data adds the jsonb column
+`trigger_state`, `users`, `settings`. `vcs_roots.properties` is `text`, not `jsonb`: it holds encrypted JSON. `CicdDbContext` in Core is provider-neutral; `PostgresCicdDbContext` in Data adds the jsonb column
 types and owns the migrations.
 
 ## Real-time
@@ -76,6 +76,44 @@ Two hubs. `/hubs/agents` is for agents and requires the agent token. `/hubs/buil
 `BuildUpdated` and `AgentUpdated` are broadcast to everyone, `BuildLog` goes to the group of a build after
 `SubscribeToBuild(buildId)`. Log lines carry sequence numbers so a client can catch up with
 `GET /api/v1/builds/{id}/log?after=<seq>` and then continue live without gaps or duplicates.
+
+## Settings and secrets
+
+Configuration comes from two places. The connection string, `Server:DataDirectory`, `Server:MigrateOnStartup`,
+`Plugins:Directory`, logging and the listen URLs must be readable before the database is, so they stay in
+`appsettings`/environment. Everything in `SettingsCatalog.All` (19 keys) is managed in the `settings` table
+(`key`, `value`, `is_secret`, `updated_at`, `updated_by`).
+
+- **Provider.** `DatabaseSettingsConfigurationSource` (Cicd.Data) is appended to `builder.Configuration.Sources` in
+  `Program.cs` *after* the JSON files and the environment, so stored rows win over both. Its provider reads the table
+  with its own short-lived `PostgresCicdDbContext`, before the service container exists.
+  `SettingsConfigurationMapper` does the shaping: secrets are decrypted, and list settings become the indexed children
+  the options binder expects (`Plugins:Disabled` stored as `a,b` becomes `Plugins:Disabled:0` and `:1`). A row that
+  cannot be decrypted is logged once and skipped, so the key falls back to its `appsettings` value or default.
+- **Seeding.** `DatabaseStartup.SeedSettingsAsync` runs before the source is added and inserts one row per cataloged
+  key that has none, taking the value from the configuration built so far. It is a first-run operation only: once a
+  row exists, `appsettings` and environment values for that key are dead weight.
+- **Reload.** `SettingsService.UpdateAsync` validates every value first (nothing is written on any error), writes the
+  rows in one `SaveChangesAsync`, then calls `ISettingsReloader.Reload()` - the same provider object, registered as a
+  singleton - which re-reads the table and raises the configuration change token. Consumers that take
+  `IOptionsMonitor<T>` and read `CurrentValue` per request or per tick therefore see the new value immediately;
+  nothing is cached in a constructor.
+- **Restart required.** Four `IdentityProvider` keys (`Authority`, `ValidateAudience`, `Audience`,
+  `RequireHttpsMetadata`) and `Plugins:Disabled` are read once while the authentication handlers and the plugin host
+  are built, so they are flagged `RestartRequired`. `SettingView.RestartPending` compares the stored value with the
+  value the provider loaded at startup, and the settings page shows a banner listing what is waiting.
+- **Secrets.** `DataProtectionSecretProtector` wraps a Data Protection provider rooted at
+  `<Server:DataDirectory>/keys`; `SecretCodec` gives stored ciphertext the prefix `enc:v1:` so unprefixed legacy
+  plaintext still loads. Secret settings are encrypted on write, and the API and UI never echo one back - `SettingView`
+  reports a mask plus `IsSet`/`Unreadable`. An empty value in an update means "leave unchanged".
+- **VCS root converter.** `HasProtectedJsonConversion` (Core, `CicdDbContext`) is an EF value converter that serializes
+  `VcsRoot.Properties` to JSON and then protects it, which is why the column is `text`. `PostgresCicdDbContext` takes
+  the `ISecretProtector` in its constructor for that reason. `DatabaseStartup.EncryptLegacyVcsRootsAsync` runs on every
+  boot and re-saves any row whose value is still plaintext; it is a no-op once they are all encrypted. The migration's
+  `Down` is not reversible once rows are encrypted, because ciphertext is not valid `jsonb`.
+- **Loss of the key ring** makes every secret unreadable: startup logs one error per row and the settings page shows
+  `unreadable, re-enter`. The key files are not themselves encrypted, so they belong in the same backup as the data
+  directory.
 
 ## Security model
 

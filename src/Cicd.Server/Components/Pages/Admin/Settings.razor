@@ -1,0 +1,99 @@
+@page "/admin/settings"
+@attribute [Authorize(Policy = Policies.Admin)]
+@inherits SecurePage
+@inject IServiceScopeFactory Scopes
+
+<PageTitle>Settings - CICD</PageTitle>
+<h1>Settings</h1>
+<p class="muted">Stored in the database and applied immediately, except where a restart is noted.</p>
+
+@if (restartPending.Count > 0)
+{
+    <div class="banner">Restart the server to apply: @string.Join(", ", restartPending)</div>
+}
+@if (error is not null)
+{
+    <div class="error">@error</div>
+}
+@if (saved is not null)
+{
+    <p class="muted">Saved @saved.</p>
+}
+
+@foreach (var section in views.GroupBy(v => v.Definition.Section))
+{
+    <div class="settings-section">
+        <h2>@section.Key</h2>
+        @foreach (var view in section)
+        {
+            var key = view.Definition.Key;
+            <div class="setting">
+                <label for="@key">@view.Definition.DisplayName @(view.Definition.RestartRequired ? "(restart)" : "")</label>
+                @switch (view.Definition.Kind)
+                {
+                    case SettingKind.Boolean:
+                        <input id="@key" type="checkbox" checked="@(edits[key] == "true")" @onchange='e => edits[key] = (bool)e.Value! ? "true" : "false"' />
+                        break;
+                    case SettingKind.Number:
+                        <input id="@key" type="number" min="0" value="@edits[key]" @onchange="e => edits[key] = e.Value?.ToString() ?? string.Empty" />
+                        break;
+                    case SettingKind.Secret:
+                        <input id="@key" type="password" placeholder="@(view.Unreadable ? "unreadable, re-enter" : view.IsSet ? "set, enter a new value to replace" : "not set")" autocomplete="new-password" value="@edits[key]" @onchange="e => edits[key] = e.Value?.ToString() ?? string.Empty" />
+                        break;
+                    default:
+                        <input id="@key" type="text" value="@edits[key]" @onchange="e => edits[key] = e.Value?.ToString() ?? string.Empty" />
+                        break;
+                }
+                <span class="hint">@view.Definition.Description @(view.Definition.Kind == SettingKind.List ? "Comma-separated." : "")</span>
+            </div>
+        }
+        <button @onclick="() => SaveAsync(section.Key)">Save @section.Key</button>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<SettingView> views = [];
+    private readonly Dictionary<string, string> edits = new(StringComparer.OrdinalIgnoreCase);
+    private List<string> restartPending = [];
+    private string? error;
+    private string? saved;
+
+    protected override Task OnInitializedAsync() => LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        await using var scope = Scopes.CreateAsyncScope();
+        views = await scope.ServiceProvider.GetRequiredService<SettingsService>().GetAllAsync(CancellationToken.None);
+        edits.Clear();
+        foreach (var view in views)
+        {
+            edits[view.Definition.Key] = view.Definition.Kind == SettingKind.Secret ? "" : view.Value;
+        }
+        restartPending = views.Where(v => v.RestartPending).Select(v => v.Definition.DisplayName).ToList();
+    }
+
+    private async Task SaveAsync(string section)
+    {
+        error = null;
+        saved = null;
+        if (!await AllowedAsync(Policies.Admin))
+        {
+            error = "Admin role required.";
+            return;
+        }
+        var values = views.Where(v => v.Definition.Section == section)
+            .ToDictionary(v => v.Definition.Key, v => (string?)edits[v.Definition.Key], StringComparer.OrdinalIgnoreCase);
+        var name = (await AuthState).User.Identity?.Name;
+        await using var scope = Scopes.CreateAsyncScope();
+        try
+        {
+            await scope.ServiceProvider.GetRequiredService<SettingsService>().UpdateAsync(values, name, CancellationToken.None);
+            saved = section;
+        }
+        catch (InvalidOperationException ex)
+        {
+            error = ex.Message;
+        }
+        await LoadAsync();
+    }
+}
