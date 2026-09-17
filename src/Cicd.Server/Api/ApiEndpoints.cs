@@ -30,6 +30,7 @@ public static class ApiEndpoints
         MapPullRequests(api.MapGroup("/pull-requests").WithTags("Pull requests"));
         MapPlugins(api.MapGroup("/plugins").WithTags("Plugins").RequireAuthorization(Policies.Admin));
         MapUsers(api.MapGroup("/users").WithTags("Users").RequireAuthorization(Policies.Admin));
+        SettingsEndpoints.MapSettings(api.MapGroup("/settings").WithTags("Settings").RequireAuthorization(Policies.Admin));
         MapWebhooks(api.MapGroup("/webhooks").WithTags("Webhooks"));
         return app;
     }

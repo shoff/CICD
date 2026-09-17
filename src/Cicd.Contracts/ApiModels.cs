@@ -127,3 +127,17 @@ public sealed record UserDto(
 public sealed record SetUserRoleRequest(UserRole Role);
 
 public sealed record SetUserDisabledRequest(bool Disabled);
+
+public sealed record SettingDto(
+    string Key,
+    string Section,
+    string DisplayName,
+    string Description,
+    string Kind,
+    bool RestartRequired,
+    string Value,
+    bool IsSet,
+    bool RestartPending,
+    bool Unreadable);
+
+public sealed record UpdateSettingsRequest(IReadOnlyDictionary<string, string?> Values);
