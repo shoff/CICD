@@ -43,11 +43,29 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
             }
             var isSet = value.Length > 0;
             var restartPending = definition.RestartRequired
-                && !string.Equals(value, reloader.ValuesAtStartup.GetValueOrDefault(definition.Key) ?? "", StringComparison.Ordinal);
+                && !string.Equals(value, StartupValue(definition), StringComparison.Ordinal);
             var shown = definition.Kind == SettingKind.Secret ? (isSet ? Mask : "") : value;
             views.Add(new SettingView(definition, shown, isSet, restartPending, unreadable));
         }
         return views;
+    }
+
+    /// <summary>
+    /// What the host started with, in the same shape as the stored row. Lists live in configuration as indexed
+    /// children (<c>Plugins:Disabled:0</c>), so they are joined back into the stored comma-separated form.
+    /// </summary>
+    private string StartupValue(SettingDefinition definition)
+    {
+        if (definition.Kind != SettingKind.List)
+        {
+            return reloader.ValuesAtStartup.GetValueOrDefault(definition.Key) ?? "";
+        }
+        var prefix = definition.Key + ":";
+        var items = reloader.ValuesAtStartup
+            .Where(pair => pair.Key.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(pair => int.TryParse(pair.Key[prefix.Length..], out var index) ? index : int.MaxValue)
+            .Select(pair => pair.Value ?? "");
+        return SettingsConfigurationMapper.JoinList(items);
     }
 
     /// <summary>Validates everything first; on any error nothing is written. Empty secrets mean "unchanged".</summary>

@@ -35,6 +35,7 @@ namespace Cicd.Data.Migrations
             migrationBuilder.DropTable(
                 name: "settings");
 
+            // Not reversible once rows have been encrypted: ciphertext is not valid jsonb.
             migrationBuilder.Sql("ALTER TABLE vcs_roots ALTER COLUMN properties TYPE jsonb USING properties::jsonb;");
         }
     }

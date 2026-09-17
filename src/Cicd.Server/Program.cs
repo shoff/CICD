@@ -1,7 +1,7 @@
 using Cicd.Core.Builds;
-using Cicd.Core.Persistence;
 using Cicd.Core.Plugins;
 using Cicd.Core.Services;
+using Cicd.Core.Settings;
 using Cicd.Data;
 using Cicd.Plugins.Sdk;
 using Cicd.Server.Api;
@@ -9,7 +9,7 @@ using Cicd.Server.Components;
 using Cicd.Server.Hubs;
 using Cicd.Server.Realtime;
 using Cicd.Server.Security;
-using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.Options;
 using Scalar.AspNetCore;
 
@@ -17,9 +17,36 @@ var builder = WebApplication.CreateBuilder(args);
 
 var connectionString = builder.Configuration.GetConnectionString("Cicd")
     ?? throw new InvalidOperationException("ConnectionStrings:Cicd is not configured.");
+var dataDirectory = Path.GetFullPath(builder.Configuration["Server:DataDirectory"] ?? "data");
+var keyDirectory = new DirectoryInfo(Path.Combine(dataDirectory, "keys"));
+keyDirectory.Create();
+var secretProtector = new DataProtectionSecretProtector(
+    DataProtectionProvider.Create(keyDirectory, o => o.SetApplicationName("cicd")));
 
 using (var startupLoggers = LoggerFactory.Create(l => l.AddSimpleConsole()))
 {
+    var startupLogger = startupLoggers.CreateLogger("Startup");
+    if (builder.Configuration.GetValue("Server:MigrateOnStartup", true))
+    {
+        startupLogger.LogInformation("Applying database migrations");
+        await DatabaseStartup.MigrateAsync(connectionString);
+    }
+    var seeded = await DatabaseStartup.SeedSettingsAsync(connectionString, builder.Configuration, secretProtector);
+    if (seeded > 0)
+    {
+        startupLogger.LogInformation("Seeded {Count} settings from configuration", seeded);
+    }
+    var encrypted = await DatabaseStartup.EncryptLegacyVcsRootsAsync(connectionString, secretProtector);
+    if (encrypted > 0)
+    {
+        startupLogger.LogInformation("Encrypted {Count} VCS root credential sets", encrypted);
+    }
+    var settingsSource = new DatabaseSettingsConfigurationSource(connectionString, secretProtector);
+    builder.Configuration.Sources.Add(settingsSource);
+    builder.Services.AddSingleton<ISecretProtector>(secretProtector);
+    builder.Services.AddSingleton<ISettingsReloader>(settingsSource.Provider);
+    builder.Services.AddDataProtection().PersistKeysToFileSystem(keyDirectory).SetApplicationName("cicd");
+
     builder.Services.LoadPlugins(builder.Configuration, PluginSide.Server, startupLoggers.CreateLogger("Plugins"));
 }
 
@@ -40,15 +67,6 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("postgres");
 
 var app = builder.Build();
-
-var serverOptions = app.Services.GetRequiredService<IOptions<CicdServerOptions>>().Value;
-if (serverOptions.MigrateOnStartup)
-{
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<CicdDbContext>();
-    app.Logger.LogInformation("Applying database migrations");
-    await db.Database.MigrateAsync();
-}
 
 if (string.IsNullOrEmpty(builder.Configuration["Agents:AuthToken"]) || builder.Configuration["Agents:AuthToken"] == "change-me")
 {

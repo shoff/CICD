@@ -103,5 +103,21 @@ public class SettingsServiceTests : IDisposable
         Assert.False(views.Single(v => v.Definition.Key == "Server:PublicUrl").RestartPending);
     }
 
+    [Fact]
+    public async Task Restart_pending_compares_lists_against_the_joined_startup_value()
+    {
+        reloader.Startup["Plugins:Disabled:0"] = "a";
+        reloader.Startup["Plugins:Disabled:1"] = "b";
+        await using var db = testDb.Create();
+        db.Settings.Add(new Setting { Key = "Plugins:Disabled", Value = "a,b" });
+        await db.SaveChangesAsync();
+        Assert.False((await Service(db).GetAllAsync(CancellationToken.None)).Single(v => v.Definition.Key == "Plugins:Disabled").RestartPending);
+
+        var row = await db.Settings.SingleAsync(s => s.Key == "Plugins:Disabled");
+        row.Value = "a";
+        await db.SaveChangesAsync();
+        Assert.True((await Service(db).GetAllAsync(CancellationToken.None)).Single(v => v.Definition.Key == "Plugins:Disabled").RestartPending);
+    }
+
     public void Dispose() => testDb.Dispose();
 }
