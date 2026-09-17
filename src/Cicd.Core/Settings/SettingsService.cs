@@ -125,12 +125,18 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
     }
 
     /// <summary>
-    /// Rules that need more than one key. The submitted values are merged over what is stored, because a section can be
-    /// saved a field at a time: the check must see the state the save would produce, not just what it carries.
+    /// Rules that need more than one key. They run only when the payload touches the IdentityProvider section: a save
+    /// of some other section must never be blocked by identity data it does not carry and cannot fix. Within the
+    /// section the submitted values are merged over what is stored, because a section can be saved a field at a time,
+    /// so the check sees the state the save would produce and not just what it carries.
     /// </summary>
     private async Task<IReadOnlyList<string>> CrossFieldErrorsAsync(IReadOnlyDictionary<string, string?> values, CancellationToken cancellationToken)
     {
         const string section = IdentityProviderSection;
+        if (!values.Keys.Any(key => SettingsCatalog.Find(key)?.Section == IdentityProviderSectionName))
+        {
+            return [];
+        }
         var merged = await db.Settings.AsNoTracking()
             .Where(s => s.Key.StartsWith(section))
             .ToDictionaryAsync(s => s.Key, s => s.Value, StringComparer.OrdinalIgnoreCase, cancellationToken);
@@ -161,7 +167,8 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
         return errors;
     }
 
-    private const string IdentityProviderSection = "IdentityProvider:";
+    private const string IdentityProviderSectionName = "IdentityProvider";
+    private const string IdentityProviderSection = IdentityProviderSectionName + ":";
 
     /// <summary>Provider URLs that must be https while <c>IdentityProvider:RequireHttpsMetadata</c> is on.</summary>
     private static readonly string[] HttpsUrlKeys = ["IdentityProvider:Authority", "IdentityProvider:LoginUrl"];

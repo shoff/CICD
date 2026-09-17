@@ -149,6 +149,20 @@ public class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Cross_field_rules_do_not_block_a_save_of_another_section()
+    {
+        await using var db = testDb.Create();
+        db.Settings.Add(new Setting { Key = "IdentityProvider:ValidateAudience", Value = "true" });
+        db.Settings.Add(new Setting { Key = "IdentityProvider:Audience", Value = "" });
+        await db.SaveChangesAsync();
+        // The stored identity data violates rule (a), but this payload carries no IdentityProvider key and cannot fix it.
+        await Service(db).UpdateAsync(
+            new Dictionary<string, string?> { ["Server:PublicUrl"] = "http://x" }, null, CancellationToken.None);
+        Assert.Equal("http://x", (await db.Settings.SingleAsync(s => s.Key == "Server:PublicUrl")).Value);
+        Assert.Equal(1, reloader.Reloads);
+    }
+
+    [Fact]
     public async Task Cross_field_rules_see_the_values_already_stored()
     {
         await using var db = testDb.Create();
