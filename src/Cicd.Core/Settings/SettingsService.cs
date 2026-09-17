@@ -14,6 +14,9 @@ public interface ISettingsReloader
 
 public sealed record SettingView(SettingDefinition Definition, string Value, bool IsSet, bool RestartPending, bool Unreadable);
 
+/// <summary>A rejected update: nothing was written. Separated from the reload failure so the API can answer 400, not 409.</summary>
+public sealed class SettingsValidationException(string message) : InvalidOperationException(message);
+
 public sealed class SettingsService(CicdDbContext db, ISecretProtector protector, ISettingsReloader reloader, TimeProvider clock, ILogger<SettingsService> logger)
 {
     public const string Mask = "********";
@@ -70,23 +73,27 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
         return SettingsConfigurationMapper.JoinList(items);
     }
 
-    /// <summary>Validates everything first; on any error nothing is written. Empty secrets mean "unchanged".</summary>
+    /// <summary>
+    /// Validates everything first; on any error nothing is written and a <see cref="SettingsValidationException"/> is
+    /// thrown. For a secret, an empty string means "unchanged" and null means "clear it".
+    /// </summary>
     public async Task UpdateAsync(IReadOnlyDictionary<string, string?> values, string? updatedBy, CancellationToken cancellationToken)
     {
-        var errors = Validate(values);
+        var errors = new List<string>(Validate(values));
+        errors.AddRange(await CrossFieldErrorsAsync(values, cancellationToken));
         if (errors.Count > 0)
         {
-            throw new InvalidOperationException(string.Join(" ", errors));
+            throw new SettingsValidationException(string.Join(" ", errors));
         }
         var now = clock.GetUtcNow();
         foreach (var (key, raw) in values)
         {
             var definition = SettingsCatalog.Find(key)!;
-            var value = raw ?? "";
-            if (definition.Kind == SettingKind.Secret && value.Length == 0)
+            if (definition.Kind == SettingKind.Secret && raw is not null && raw.Length == 0)
             {
                 continue;
             }
+            var value = raw ?? "";
             var row = await db.Settings.FirstOrDefaultAsync(s => s.Key == definition.Key, cancellationToken);
             if (row is null)
             {
@@ -95,7 +102,8 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
             }
             row.Value = definition.Kind switch
             {
-                SettingKind.Secret => SecretCodec.Encode(protector, value),
+                // A cleared secret stores an empty value, which the configuration mapper passes on as unset.
+                SettingKind.Secret => value.Length == 0 ? "" : SecretCodec.Encode(protector, value),
                 SettingKind.List => SettingsConfigurationMapper.JoinList(SettingsConfigurationMapper.SplitList(value)),
                 SettingKind.Boolean => bool.Parse(value).ToString().ToLowerInvariant(),
                 _ => value.Trim(),
@@ -116,6 +124,60 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
         }
     }
 
+    /// <summary>
+    /// Rules that need more than one key. The submitted values are merged over what is stored, because a section can be
+    /// saved a field at a time: the check must see the state the save would produce, not just what it carries.
+    /// </summary>
+    private async Task<IReadOnlyList<string>> CrossFieldErrorsAsync(IReadOnlyDictionary<string, string?> values, CancellationToken cancellationToken)
+    {
+        const string section = IdentityProviderSection;
+        var merged = await db.Settings.AsNoTracking()
+            .Where(s => s.Key.StartsWith(section))
+            .ToDictionaryAsync(s => s.Key, s => s.Value, StringComparer.OrdinalIgnoreCase, cancellationToken);
+        foreach (var (key, raw) in values)
+        {
+            if (key.StartsWith(section, StringComparison.OrdinalIgnoreCase))
+            {
+                merged[key] = (raw ?? "").Trim();
+            }
+        }
+
+        var errors = new List<string>();
+        if (IsTrue(merged, "IdentityProvider:ValidateAudience") && Value(merged, "IdentityProvider:Audience").Length == 0)
+        {
+            errors.Add($"{Name("IdentityProvider:Audience")} is required when {Name("IdentityProvider:ValidateAudience")} is on.");
+        }
+        if (IsTrue(merged, "IdentityProvider:RequireHttpsMetadata"))
+        {
+            foreach (var key in HttpsUrlKeys)
+            {
+                var url = Value(merged, key);
+                if (url.Length > 0 && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+                {
+                    errors.Add($"{Name(key)} must start with https:// while {Name("IdentityProvider:RequireHttpsMetadata")} is on.");
+                }
+            }
+        }
+        return errors;
+    }
+
+    private const string IdentityProviderSection = "IdentityProvider:";
+
+    /// <summary>Provider URLs that must be https while <c>IdentityProvider:RequireHttpsMetadata</c> is on.</summary>
+    private static readonly string[] HttpsUrlKeys = ["IdentityProvider:Authority", "IdentityProvider:LoginUrl"];
+
+    private static string Value(IReadOnlyDictionary<string, string> merged, string key) =>
+        merged.TryGetValue(key, out var value) ? value : "";
+
+    private static bool IsTrue(IReadOnlyDictionary<string, string> merged, string key) =>
+        bool.TryParse(Value(merged, key), out var flag) && flag;
+
+    private static string Name(string key) => SettingsCatalog.Find(key)?.DisplayName ?? key;
+
+    /// <summary>
+    /// Per-key checks. A null value is accepted: for a secret it means "clear it", and for any other kind it is
+    /// treated as an empty string.
+    /// </summary>
     public static IReadOnlyList<string> Validate(IReadOnlyDictionary<string, string?> values)
     {
         var errors = new List<string>();

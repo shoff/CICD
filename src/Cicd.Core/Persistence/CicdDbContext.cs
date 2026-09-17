@@ -131,6 +131,30 @@ public sealed class ProtectorModelCacheKeyFactory : IModelCacheKeyFactory
         (context.GetType(), designTime, context is CicdDbContext cicd ? cicd.Protector : null);
 }
 
+/// <summary>
+/// Decoding for the protected JSON columns. EF value converters must be expression trees over static methods, so the
+/// try/catch lives here rather than inline in the converter lambda.
+/// </summary>
+public static class ProtectedJson
+{
+    /// <summary>
+    /// Never throws. A row whose ciphertext cannot be read (a lost or rotated key ring) loads as an empty dictionary,
+    /// so the entity is still usable and the caller can report the missing credentials. See
+    /// <see cref="Cicd.Core.Builds.BuildJobFactory"/>, which logs a warning when a checkout has no properties.
+    /// </summary>
+    public static Dictionary<string, string> DecodeProperties(ISecretProtector protector, string stored)
+    {
+        try
+        {
+            return CicdDbContext.Deserialize<Dictionary<string, string>>(SecretCodec.Decode(protector, stored));
+        }
+        catch (Exception)
+        {
+            return [];
+        }
+    }
+}
+
 internal static class JsonPropertyExtensions
 {
     /// <summary>
@@ -158,7 +182,7 @@ internal static class JsonPropertyExtensions
     {
         var converter = new ValueConverter<Dictionary<string, string>, string>(
             value => SecretCodec.Encode(protector, CicdDbContext.Serialize(value)),
-            stored => CicdDbContext.Deserialize<Dictionary<string, string>>(SecretCodec.Decode(protector, stored)));
+            stored => ProtectedJson.DecodeProperties(protector, stored));
         var comparer = new ValueComparer<Dictionary<string, string>>(
             (left, right) => CicdDbContext.Serialize(left!) == CicdDbContext.Serialize(right!),
             value => CicdDbContext.Serialize(value).GetHashCode(),

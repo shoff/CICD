@@ -81,12 +81,82 @@ public class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Null_secret_clears_it()
+    {
+        await using var db = testDb.Create();
+        var service = Service(db);
+        await service.UpdateAsync(new Dictionary<string, string?> { ["Agents:AuthToken"] = "first" }, null, CancellationToken.None);
+        await service.UpdateAsync(new Dictionary<string, string?> { ["Agents:AuthToken"] = null }, null, CancellationToken.None);
+        var row = await db.Settings.SingleAsync(s => s.Key == "Agents:AuthToken");
+        Assert.Equal("", row.Value);
+        Assert.True(row.IsSecret);
+        var view = (await service.GetAllAsync(CancellationToken.None)).Single(v => v.Definition.Key == "Agents:AuthToken");
+        Assert.False(view.IsSet);
+    }
+
+    [Fact]
     public async Task Update_with_invalid_values_writes_nothing()
     {
         await using var db = testDb.Create();
-        await Assert.ThrowsAsync<InvalidOperationException>(() => Service(db).UpdateAsync(
+        await Assert.ThrowsAsync<SettingsValidationException>(() => Service(db).UpdateAsync(
             new Dictionary<string, string?> { ["Server:PublicUrl"] = "http://x", ["Server:DispatchIntervalSeconds"] = "x" }, null, CancellationToken.None));
         Assert.Equal(0, await db.Settings.CountAsync());
+        Assert.Equal(0, reloader.Reloads);
+    }
+
+    [Fact]
+    public async Task Audience_validation_without_an_audience_is_rejected()
+    {
+        await using var db = testDb.Create();
+        var error = await Assert.ThrowsAsync<SettingsValidationException>(() => Service(db).UpdateAsync(
+            new Dictionary<string, string?> { ["IdentityProvider:ValidateAudience"] = "true", ["IdentityProvider:Audience"] = "" },
+            null, CancellationToken.None));
+        Assert.Contains("Audience", error.Message);
+        Assert.Equal(0, await db.Settings.CountAsync());
+        Assert.Equal(0, reloader.Reloads);
+    }
+
+    [Fact]
+    public async Task Https_requirement_rejects_a_plain_http_authority_or_login_url()
+    {
+        await using var db = testDb.Create();
+        var service = Service(db);
+        var authority = await Assert.ThrowsAsync<SettingsValidationException>(() => service.UpdateAsync(
+            new Dictionary<string, string?> { ["IdentityProvider:RequireHttpsMetadata"] = "true", ["IdentityProvider:Authority"] = "http://idp" },
+            null, CancellationToken.None));
+        Assert.Contains("Authority", authority.Message);
+        var login = await Assert.ThrowsAsync<SettingsValidationException>(() => service.UpdateAsync(
+            new Dictionary<string, string?> { ["IdentityProvider:RequireHttpsMetadata"] = "true", ["IdentityProvider:LoginUrl"] = "http://idp/login" },
+            null, CancellationToken.None));
+        Assert.Contains("Login URL", login.Message);
+        Assert.Equal(0, await db.Settings.CountAsync());
+        Assert.Equal(0, reloader.Reloads);
+    }
+
+    [Fact]
+    public async Task Https_requirement_accepts_https_urls()
+    {
+        await using var db = testDb.Create();
+        await Service(db).UpdateAsync(
+            new Dictionary<string, string?>
+            {
+                ["IdentityProvider:RequireHttpsMetadata"] = "true",
+                ["IdentityProvider:Authority"] = "https://idp",
+                ["IdentityProvider:LoginUrl"] = "https://idp/login",
+            }, null, CancellationToken.None);
+        Assert.Equal("https://idp", (await db.Settings.SingleAsync(s => s.Key == "IdentityProvider:Authority")).Value);
+        Assert.Equal(1, reloader.Reloads);
+    }
+
+    [Fact]
+    public async Task Cross_field_rules_see_the_values_already_stored()
+    {
+        await using var db = testDb.Create();
+        db.Settings.Add(new Setting { Key = "IdentityProvider:RequireHttpsMetadata", Value = "true" });
+        await db.SaveChangesAsync();
+        // The authority alone is submitted; the requirement it violates is only in the table.
+        await Assert.ThrowsAsync<SettingsValidationException>(() => Service(db).UpdateAsync(
+            new Dictionary<string, string?> { ["IdentityProvider:Authority"] = "http://idp" }, null, CancellationToken.None));
         Assert.Equal(0, reloader.Reloads);
     }
 

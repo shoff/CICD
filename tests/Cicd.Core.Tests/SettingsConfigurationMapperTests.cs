@@ -1,5 +1,6 @@
 using Cicd.Core.Entities;
 using Cicd.Core.Settings;
+using Microsoft.Extensions.Configuration;
 
 namespace Cicd.Core.Tests;
 
@@ -36,12 +37,55 @@ public class SettingsConfigurationMapperTests
     }
 
     [Fact]
-    public void Unreadable_secret_is_omitted_not_thrown()
+    public void Unreadable_secret_shadows_lower_layers()
     {
         var throwing = new ThrowingProtector();
         var rows = new[] { new Setting { Key = "GitHub:Token", Value = "enc:v1:garbage", IsSecret = true } };
         var config = SettingsConfigurationMapper.ToConfiguration(rows, throwing);
-        Assert.False(config.ContainsKey("GitHub:Token"));
+        // Fail closed: the key is present and empty, so the appsettings value cannot show through.
+        Assert.True(config.ContainsKey("GitHub:Token"));
+        Assert.Equal("", config["GitHub:Token"]);
+    }
+
+    [Fact]
+    public void Cleared_list_shadows_every_index_the_lower_layers_define()
+    {
+        var rows = new[] { new Setting { Key = "Security:BootstrapAdmins", Value = "" } };
+        var config = SettingsConfigurationMapper.ToConfiguration(
+            rows, protector, new Dictionary<string, int> { ["Security:BootstrapAdmins"] = 2 }, null);
+        Assert.True(config.ContainsKey("Security:BootstrapAdmins:0"));
+        Assert.True(config.ContainsKey("Security:BootstrapAdmins:1"));
+        Assert.Null(config["Security:BootstrapAdmins:0"]);
+        Assert.Null(config["Security:BootstrapAdmins:1"]);
+    }
+
+    [Fact]
+    public void Shrunk_list_shadows_only_the_indices_it_no_longer_fills()
+    {
+        var rows = new[] { new Setting { Key = "Security:BootstrapAdmins", Value = "new" } };
+        var config = SettingsConfigurationMapper.ToConfiguration(
+            rows, protector, new Dictionary<string, int> { ["Security:BootstrapAdmins"] = 2 }, null);
+        Assert.Equal("new", config["Security:BootstrapAdmins:0"]);
+        Assert.Null(config["Security:BootstrapAdmins:1"]);
+        Assert.False(config.ContainsKey("Security:BootstrapAdmins:2"));
+    }
+
+    [Fact]
+    public void A_cleared_list_wins_over_a_lower_configuration_layer()
+    {
+        var mapped = SettingsConfigurationMapper.ToConfiguration(
+            [new Setting { Key = "Security:BootstrapAdmins", Value = "" }],
+            protector,
+            new Dictionary<string, int> { ["Security:BootstrapAdmins"] = 1 },
+            null);
+        var configuration = new ConfigurationBuilder()
+            .AddInMemoryCollection([new KeyValuePair<string, string?>("Security:BootstrapAdmins:0", "a@x.com")])
+            .Add(new StubSource(mapped))
+            .Build();
+        var admins = (configuration.GetSection("Security:BootstrapAdmins").Get<string[]>() ?? [])
+            .Where(value => !string.IsNullOrEmpty(value))
+            .ToList();
+        Assert.Empty(admins);
     }
 
     [Fact]
@@ -57,4 +101,12 @@ public sealed class ThrowingProtector : ISecretProtector
 {
     public string Protect(string plaintext) => throw new InvalidOperationException("no key");
     public string Unprotect(string ciphertext) => throw new InvalidOperationException("no key");
+}
+
+/// <summary>An upper configuration layer fed straight from the mapper output, the way the database provider is.</summary>
+public sealed class StubSource(IDictionary<string, string?> values) : ConfigurationProvider, IConfigurationSource
+{
+    public override void Load() => Data = new Dictionary<string, string?>(values, StringComparer.OrdinalIgnoreCase);
+
+    public IConfigurationProvider Build(IConfigurationBuilder builder) => this;
 }

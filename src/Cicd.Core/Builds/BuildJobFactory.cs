@@ -1,10 +1,11 @@
 using Cicd.Contracts;
 using Cicd.Core.Entities;
 using Cicd.Plugins.Sdk;
+using Microsoft.Extensions.Logging;
 
 namespace Cicd.Core.Builds;
 
-public sealed class BuildJobFactory(IEnumerable<IVcsProvider> vcsProviders)
+public sealed class BuildJobFactory(IEnumerable<IVcsProvider> vcsProviders, ILogger<BuildJobFactory> logger)
 {
     public async Task<BuildJob> CreateAsync(Build build, BuildConfiguration configuration, CancellationToken cancellationToken)
     {
@@ -50,6 +51,12 @@ public sealed class BuildJobFactory(IEnumerable<IVcsProvider> vcsProviders)
             ExecutionPolicy = step.ExecutionPolicy,
             Parameters = step.Parameters.ToDictionary(kv => kv.Key, kv => ParameterResolver.Resolve(kv.Value, resolved)),
         }).ToList();
+
+        if (root is not null && root.Properties.Count == 0)
+        {
+            // Either none were set, or the stored credentials could not be decrypted (see ProtectedJson.DecodeProperties).
+            logger.LogWarning("VCS root {Name} has no readable credentials", root.Name);
+        }
 
         return new BuildJob
         {

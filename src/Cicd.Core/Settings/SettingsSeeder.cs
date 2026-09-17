@@ -24,7 +24,8 @@ public static class SettingsSeeder
                 SettingKind.List => SettingsConfigurationMapper.JoinList(configuration.GetSection(definition.Key).GetChildren().Select(c => c.Value ?? "")),
                 // JSON booleans arrive as "True"/"False"; store the casing UpdateAsync writes so comparisons stay ordinal.
                 SettingKind.Boolean when bool.TryParse(configuration[definition.Key], out var flag) => flag ? "true" : "false",
-                _ => configuration[definition.Key] ?? "",
+                // Nothing in configuration: fall back to the catalog default so booleans and numbers are readable.
+                _ => configuration[definition.Key] ?? definition.DefaultValue ?? "",
             };
             var isSecret = definition.Kind == SettingKind.Secret;
             rows.Add(new Setting

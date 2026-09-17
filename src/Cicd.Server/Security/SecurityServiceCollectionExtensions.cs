@@ -17,14 +17,9 @@ public static class SecurityServiceCollectionExtensions
         services.Configure<IdentityProviderOptions>(configuration.GetSection(IdentityProviderOptions.SectionName));
         var provider = configuration.GetSection(IdentityProviderOptions.SectionName).Get<IdentityProviderOptions>() ?? new IdentityProviderOptions();
 
-        if (provider.IsConfigured && provider.RequireHttpsMetadata
-            && !provider.EffectiveLoginUrl.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
-        {
-            // Fail at boot rather than on every sign-in attempt. V21LoginClient checks again at call time.
-            throw new InvalidOperationException(
-                $"IdentityProvider login URL '{provider.EffectiveLoginUrl}' must use https unless IdentityProvider:RequireHttpsMetadata is false.");
-        }
-
+        // A plain-http login URL is not a boot failure: the settings are in the database now, and refusing to start
+        // would lock the operator out of the page that fixes it. SettingsService rejects the combination on write, and
+        // V21LoginClient refuses the call at sign-in time.
         services.AddHttpClient<V21LoginClient>();
         services.AddHttpContextAccessor();
         services.AddScoped<IClaimsTransformation, LocalUserClaimsTransformation>();

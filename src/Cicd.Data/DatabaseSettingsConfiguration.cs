@@ -6,14 +6,21 @@ using Microsoft.Extensions.Logging;
 namespace Cicd.Data;
 
 /// <summary>Configuration source over the settings table. Added last so stored values win over appsettings and environment.</summary>
-public sealed class DatabaseSettingsConfigurationSource(string connectionString, ISecretProtector protector, ILogger? logger = null) : IConfigurationSource
+public sealed class DatabaseSettingsConfigurationSource(
+    string connectionString, ISecretProtector protector, IReadOnlyDictionary<string, int> shadowedListLengths, ILogger? logger = null) : IConfigurationSource
 {
-    public DatabaseSettingsConfigurationProvider Provider { get; } = new(connectionString, protector, logger);
+    public DatabaseSettingsConfigurationProvider Provider { get; } = new(connectionString, protector, shadowedListLengths, logger);
 
     public IConfigurationProvider Build(IConfigurationBuilder builder) => Provider;
 }
 
-public sealed class DatabaseSettingsConfigurationProvider(string connectionString, ISecretProtector protector, ILogger? logger = null) : ConfigurationProvider, ISettingsReloader
+/// <summary>
+/// <paramref name="shadowedListLengths"/> tells the mapper how many indices each list key already has in the lower
+/// layers, so a cleared or shrunk stored list hides them instead of being unioned with them.
+/// </summary>
+public sealed class DatabaseSettingsConfigurationProvider(
+    string connectionString, ISecretProtector protector, IReadOnlyDictionary<string, int> shadowedListLengths, ILogger? logger = null)
+    : ConfigurationProvider, ISettingsReloader
 {
     private Dictionary<string, string?>? startup;
 
@@ -27,7 +34,7 @@ public sealed class DatabaseSettingsConfigurationProvider(string connectionStrin
         var options = PostgresServiceCollectionExtensions.Configure(new DbContextOptionsBuilder<PostgresCicdDbContext>(), connectionString).Options;
         using var db = new PostgresCicdDbContext(options, protector);
         var rows = db.Settings.AsNoTracking().ToList();
-        var mapped = SettingsConfigurationMapper.ToConfiguration(rows, protector, Logger);
+        var mapped = SettingsConfigurationMapper.ToConfiguration(rows, protector, shadowedListLengths, Logger);
         Data = new Dictionary<string, string?>(mapped, StringComparer.OrdinalIgnoreCase);
         startup ??= new Dictionary<string, string?>(Data, StringComparer.OrdinalIgnoreCase);
     }

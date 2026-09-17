@@ -44,14 +44,24 @@ using (var startupLoggers = LoggerFactory.Create(l => l.AddSimpleConsole()))
         {
             startupLogger.LogInformation("Encrypted {Count} VCS root credential sets", encrypted);
         }
+        // How many entries each list key has in appsettings and the environment, read before the database source is
+        // added. The provider needs it to shadow those entries when the stored list is shorter or empty.
+        var shadowedListLengths = SettingsCatalog.All
+            .Where(definition => definition.Kind == SettingKind.List)
+            .ToDictionary(
+                definition => definition.Key,
+                definition => builder.Configuration.GetSection(definition.Key).GetChildren().Count(),
+                StringComparer.OrdinalIgnoreCase);
+        settingsSource = new DatabaseSettingsConfigurationSource(
+            connectionString, secretProtector, shadowedListLengths, startupLoggers.CreateLogger("Settings"));
+        // Inside the try: adding the source triggers the provider's first Load(), which reads the table.
+        builder.Configuration.Sources.Add(settingsSource);
     }
     catch (Exception ex)
     {
         startupLogger.LogCritical(ex, "Cannot reach the database at startup ({Message})", ex.Message);
         throw;
     }
-    settingsSource = new DatabaseSettingsConfigurationSource(connectionString, secretProtector, startupLoggers.CreateLogger("Settings"));
-    builder.Configuration.Sources.Add(settingsSource);
     builder.Services.AddSingleton<ISecretProtector>(secretProtector);
     builder.Services.AddSingleton<ISettingsReloader>(settingsSource.Provider);
     builder.Services.AddDataProtection().PersistKeysToFileSystem(keyDirectory).SetApplicationName("cicd");

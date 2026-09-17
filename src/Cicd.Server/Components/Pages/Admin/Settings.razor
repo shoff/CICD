@@ -5,7 +5,10 @@
 
 <PageTitle>Settings - CICD</PageTitle>
 <h1>Settings</h1>
-<p class="muted">Stored in the database and applied immediately, except where a restart is noted.</p>
+<p class="muted">
+    Stored in the database and applied to this instance as soon as they are saved, except where a restart is noted.
+    Other instances keep their startup values until they are restarted.
+</p>
 
 @if (restartPending.Count > 0)
 {
@@ -39,6 +42,7 @@
                         break;
                     case SettingKind.Secret:
                         <input id="@key" type="password" placeholder="@(view.Unreadable ? "unreadable, re-enter" : view.IsSet ? "set, enter a new value to replace" : "not set")" autocomplete="new-password" value="@edits[key]" @onchange="e => edits[key] = e.Value?.ToString() ?? string.Empty" />
+                        <label class="small"><input type="checkbox" @onchange="e => clears[key] = (bool)e.Value!" /> Clear</label>
                         break;
                     default:
                         <input id="@key" type="text" value="@edits[key]" @onchange="e => edits[key] = e.Value?.ToString() ?? string.Empty" />
@@ -54,6 +58,8 @@
 @code {
     private IReadOnlyList<SettingView> views = [];
     private readonly Dictionary<string, string> edits = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Secrets whose "Clear" box is ticked. They are sent as null, which removes the stored value.</summary>
+    private readonly Dictionary<string, bool> clears = new(StringComparer.OrdinalIgnoreCase);
     private List<string> restartPending = [];
     private string? error;
     private string? saved;
@@ -65,6 +71,7 @@
         await using var scope = Scopes.CreateAsyncScope();
         views = await scope.ServiceProvider.GetRequiredService<SettingsService>().GetAllAsync(CancellationToken.None);
         edits.Clear();
+        clears.Clear();
         foreach (var view in views)
         {
             edits[view.Definition.Key] = view.Definition.Kind == SettingKind.Secret ? "" : view.Value;
@@ -82,7 +89,12 @@
             return;
         }
         var values = views.Where(v => v.Definition.Section == section)
-            .ToDictionary(v => v.Definition.Key, v => (string?)edits[v.Definition.Key], StringComparer.OrdinalIgnoreCase);
+            .ToDictionary(
+                v => v.Definition.Key,
+                v => v.Definition.Kind == SettingKind.Secret && clears.GetValueOrDefault(v.Definition.Key)
+                    ? null
+                    : (string?)edits[v.Definition.Key],
+                StringComparer.OrdinalIgnoreCase);
         var name = (await AuthState).User.Identity?.Name;
         await using var scope = Scopes.CreateAsyncScope();
         try

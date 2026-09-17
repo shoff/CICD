@@ -29,7 +29,17 @@ public class SettingsSeederTests
         var config = Config(("Agents:AutoAuthorize", "True"));
         var rows = SettingsSeeder.MissingRows(config, [], new ReversingProtector(), new TestClock());
         Assert.Equal("true", rows.Single(r => r.Key == "Agents:AutoAuthorize").Value);
-        Assert.Equal("", rows.Single(r => r.Key == "IdentityProvider:ValidateAudience").Value);
+        // Nothing in configuration, so the catalog default is stored - not an empty string the binder cannot read.
+        Assert.Equal("false", rows.Single(r => r.Key == "IdentityProvider:ValidateAudience").Value);
+    }
+
+    [Fact]
+    public void Keys_missing_from_configuration_seed_their_catalog_default()
+    {
+        var rows = SettingsSeeder.MissingRows(Config(), [], new ReversingProtector(), new TestClock());
+        Assert.Equal("true", rows.Single(r => r.Key == "IdentityProvider:RequireHttpsMetadata").Value);
+        Assert.Equal("15", rows.Single(r => r.Key == "IdentityProvider:TimeoutSeconds").Value);
+        Assert.Equal("https://api.github.com/", rows.Single(r => r.Key == "GitHub:ApiBaseUrl").Value);
     }
 
     [Fact]
@@ -38,7 +48,7 @@ public class SettingsSeederTests
         var config = Config(("Security:BootstrapAdmins:0", "a@x.com"), ("Security:BootstrapAdmins:1", "b@x.com"));
         var rows = SettingsSeeder.MissingRows(config, [], new ReversingProtector(), new TestClock());
         Assert.Equal("a@x.com,b@x.com", rows.Single(r => r.Key == "Security:BootstrapAdmins").Value);
-        Assert.Equal("", rows.Single(r => r.Key == "GitHub:ApiBaseUrl").Value);
+        Assert.Equal("", rows.Single(r => r.Key == "IdentityProvider:Audience").Value);
         Assert.Equal(SettingsCatalog.All.Count, rows.Count);
     }
 }

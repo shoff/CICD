@@ -37,6 +37,26 @@ public class VcsRootProtectionTests
     }
 
     [Fact]
+    public async Task Undecryptable_properties_load_as_empty_instead_of_throwing()
+    {
+        using var testDb = new TestDb(new ThrowingProtector());
+        await using (var db = testDb.Create())
+        {
+            var project = new Project { Name = "p" };
+            db.Projects.Add(project);
+            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlRawAsync(
+                "insert into vcs_roots (Id, ProjectId, Name, ProviderId, Url, DefaultBranch, Properties, CreatedAt) values ({0}, {1}, 'lost-keys', 'git', 'https://example.com/l.git', 'main', {2}, {3})",
+                Guid.NewGuid(), project.Id, "enc:v1:garbage", DateTimeOffset.UtcNow);
+        }
+        await using (var db = testDb.Create())
+        {
+            var root = await db.VcsRoots.SingleAsync(r => r.Name == "lost-keys");
+            Assert.Empty(root.Properties);
+        }
+    }
+
+    [Fact]
     public async Task Legacy_plaintext_json_still_loads()
     {
         using var testDb = new TestDb(new ReversingProtector());

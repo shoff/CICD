@@ -26,6 +26,11 @@ public static class SettingsEndpoints
             {
                 await settings.UpdateAsync(request.Values, caller.Identity?.Name ?? "api-token", ct);
             }
+            catch (SettingsValidationException ex)
+            {
+                // Rejected before any write, including the cross-field rules the per-key Validate above cannot see.
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["settings"] = [ex.Message] });
+            }
             catch (InvalidOperationException ex)
             {
                 return Results.Problem(ex.Message, statusCode: StatusCodes.Status409Conflict);
