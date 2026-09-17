@@ -2,7 +2,6 @@ using Cicd.Contracts;
 using Cicd.Core.Persistence;
 using Cicd.Core.Users;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace Cicd.Core.Tests;
 
@@ -13,7 +12,7 @@ public class UserServiceTests : IDisposable
     private readonly TestClock clock = new();
 
     private UserService Service(CicdDbContext db, params string[] bootstrapAdmins) =>
-        new(db, Options.Create(new SecurityOptions { BootstrapAdmins = [.. bootstrapAdmins] }), clock);
+        new(db, new StaticOptionsMonitor<SecurityOptions>(new SecurityOptions { BootstrapAdmins = [.. bootstrapAdmins] }), clock);
 
     [Fact]
     public async Task New_user_is_created_as_viewer_with_profile_and_last_seen()

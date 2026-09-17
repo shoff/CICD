@@ -10,14 +10,14 @@ using Microsoft.Extensions.Options;
 namespace Cicd.Core.Triggers;
 
 /// <summary>Periodically evaluates every configured trigger and queues the builds they request.</summary>
-public sealed class TriggerService(IServiceScopeFactory scopeFactory, IOptions<CicdServerOptions> options, TimeProvider clock, ILogger<TriggerService> logger) : BackgroundService
+public sealed class TriggerService(IServiceScopeFactory scopeFactory, IOptionsMonitor<CicdServerOptions> options, TimeProvider clock, ILogger<TriggerService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var interval = TimeSpan.FromSeconds(Math.Max(5, options.Value.TriggerPollIntervalSeconds));
-        using var timer = new PeriodicTimer(interval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
+            var interval = TimeSpan.FromSeconds(Math.Max(5, options.CurrentValue.TriggerPollIntervalSeconds));
+            await Task.Delay(interval, stoppingToken);
             try
             {
                 await EvaluateAllAsync(stoppingToken);

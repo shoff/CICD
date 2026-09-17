@@ -12,14 +12,14 @@ namespace Cicd.Core.Builds;
 /// <summary>
 /// Assigns queued builds to compatible, idle, connected agents. Oldest build first, one build per agent at a time.
 /// </summary>
-public sealed class BuildDispatcher(IServiceScopeFactory scopeFactory, AgentConnectionRegistry connections, IAgentChannel channel, IOptions<CicdServerOptions> options, TimeProvider clock, ILogger<BuildDispatcher> logger) : BackgroundService
+public sealed class BuildDispatcher(IServiceScopeFactory scopeFactory, AgentConnectionRegistry connections, IAgentChannel channel, IOptionsMonitor<CicdServerOptions> options, TimeProvider clock, ILogger<BuildDispatcher> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var interval = TimeSpan.FromSeconds(Math.Max(1, options.Value.DispatchIntervalSeconds));
-        using var timer = new PeriodicTimer(interval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
+            var interval = TimeSpan.FromSeconds(Math.Max(1, options.CurrentValue.DispatchIntervalSeconds));
+            await Task.Delay(interval, stoppingToken);
             try
             {
                 await DispatchOnceAsync(stoppingToken);

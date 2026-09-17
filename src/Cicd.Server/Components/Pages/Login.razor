@@ -1,10 +1,10 @@
 @page "/login"
 @attribute [AllowAnonymous]
-@inject IOptions<IdentityProviderOptions> Identity
+@inject IOptionsMonitor<IdentityProviderOptions> Identity
 
 <PageTitle>Sign in - CICD</PageTitle>
 <h1>Sign in</h1>
-@if (!Identity.Value.IsConfigured)
+@if (!Identity.CurrentValue.IsConfigured)
 {
     <p class="muted">No identity provider is configured. The server is running in open mode.</p>
 }

@@ -6,7 +6,6 @@ using Cicd.Core.Users;
 using Cicd.Server.Security;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 
 namespace Cicd.Server.Tests;
 
@@ -18,7 +17,7 @@ public class LocalUserClaimsTransformationTests : IDisposable
     private (LocalUserClaimsTransformation Transformation, CicdDbContext Db, HttpContextAccessor Accessor) Build(params string[] bootstrapAdmins)
     {
         var db = testDb.Create();
-        var users = new UserService(db, Options.Create(new SecurityOptions { BootstrapAdmins = [.. bootstrapAdmins] }), clock);
+        var users = new UserService(db, new StaticOptionsMonitor<SecurityOptions>(new SecurityOptions { BootstrapAdmins = [.. bootstrapAdmins] }), clock);
         var accessor = new HttpContextAccessor { HttpContext = new DefaultHttpContext() };
         return (new LocalUserClaimsTransformation(users, accessor), db, accessor);
     }

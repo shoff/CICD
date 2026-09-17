@@ -15,9 +15,9 @@ public static class AuthEndpoints
         // for form-bound endpoints; the page emits the token with <AntiforgeryToken />.
         app.MapPost("/login", async Task<IResult> (
             [FromForm] string? userName, [FromForm] string? password, [FromForm] string? returnUrl,
-            HttpContext http, V21LoginClient login, UserService users, IOptions<IdentityProviderOptions> provider) =>
+            HttpContext http, V21LoginClient login, UserService users, IOptionsMonitor<IdentityProviderOptions> provider) =>
         {
-            if (!provider.Value.IsConfigured)
+            if (!provider.CurrentValue.IsConfigured)
             {
                 return Results.NotFound();
             }

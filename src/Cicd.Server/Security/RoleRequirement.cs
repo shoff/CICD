@@ -16,9 +16,9 @@ public sealed class RoleRequirement(UserRole minimum) : IAuthorizationRequiremen
 /// Succeeds when the principal's highest role meets the minimum. Also succeeds for everyone in open mode (no identity
 /// provider configured and no Security:ApiToken), which keeps the pre-login local development behavior.
 /// </summary>
-public sealed class RoleRequirementHandler(IOptions<IdentityProviderOptions> provider, IOptions<SecurityOptions> security) : AuthorizationHandler<RoleRequirement>
+public sealed class RoleRequirementHandler(IOptionsMonitor<IdentityProviderOptions> provider, IOptionsMonitor<SecurityOptions> security) : AuthorizationHandler<RoleRequirement>
 {
-    public bool OpenMode => !provider.Value.IsConfigured && string.IsNullOrEmpty(security.Value.ApiToken);
+    public bool OpenMode => !provider.CurrentValue.IsConfigured && string.IsNullOrEmpty(security.CurrentValue.ApiToken);
 
     protected override Task HandleRequirementAsync(AuthorizationHandlerContext context, RoleRequirement requirement)
     {

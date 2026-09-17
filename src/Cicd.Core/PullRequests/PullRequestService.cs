@@ -14,14 +14,14 @@ namespace Cicd.Core.PullRequests;
 /// Equivalent of TeamCity's "Pull Requests" build feature: discovers open pull requests on every VCS root used by a
 /// configuration with the feature enabled, and queues a build whenever a pull request's head moves.
 /// </summary>
-public sealed class PullRequestService(IServiceScopeFactory scopeFactory, IOptions<CicdServerOptions> options, TimeProvider clock, ILogger<PullRequestService> logger) : BackgroundService
+public sealed class PullRequestService(IServiceScopeFactory scopeFactory, IOptionsMonitor<CicdServerOptions> options, TimeProvider clock, ILogger<PullRequestService> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var interval = TimeSpan.FromSeconds(Math.Max(10, options.Value.PullRequestPollIntervalSeconds));
-        using var timer = new PeriodicTimer(interval);
-        while (await timer.WaitForNextTickAsync(stoppingToken))
+        while (!stoppingToken.IsCancellationRequested)
         {
+            var interval = TimeSpan.FromSeconds(Math.Max(10, options.CurrentValue.PullRequestPollIntervalSeconds));
+            await Task.Delay(interval, stoppingToken);
             try
             {
                 await RefreshAsync(null, stoppingToken);

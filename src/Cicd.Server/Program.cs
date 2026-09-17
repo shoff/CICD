@@ -23,6 +23,7 @@ keyDirectory.Create();
 var secretProtector = new DataProtectionSecretProtector(
     DataProtectionProvider.Create(keyDirectory, o => o.SetApplicationName("cicd")));
 
+DatabaseSettingsConfigurationSource settingsSource;
 using (var startupLoggers = LoggerFactory.Create(l => l.AddSimpleConsole()))
 {
     var startupLogger = startupLoggers.CreateLogger("Startup");
@@ -49,7 +50,7 @@ using (var startupLoggers = LoggerFactory.Create(l => l.AddSimpleConsole()))
         startupLogger.LogCritical(ex, "Cannot reach the database at startup ({Message})", ex.Message);
         throw;
     }
-    var settingsSource = new DatabaseSettingsConfigurationSource(connectionString, secretProtector, startupLoggers.CreateLogger("Settings"));
+    settingsSource = new DatabaseSettingsConfigurationSource(connectionString, secretProtector, startupLoggers.CreateLogger("Settings"));
     builder.Configuration.Sources.Add(settingsSource);
     builder.Services.AddSingleton<ISecretProtector>(secretProtector);
     builder.Services.AddSingleton<ISettingsReloader>(settingsSource.Provider);
@@ -75,6 +76,7 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddHealthChecks().AddCheck<DatabaseHealthCheck>("postgres");
 
 var app = builder.Build();
+settingsSource.Provider.Logger = app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Settings");
 
 if (string.IsNullOrEmpty(builder.Configuration["Agents:AuthToken"]) || builder.Configuration["Agents:AuthToken"] == "change-me")
 {

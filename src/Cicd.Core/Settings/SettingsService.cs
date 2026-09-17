@@ -105,7 +105,15 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
             row.UpdatedBy = updatedBy;
         }
         await db.SaveChangesAsync(cancellationToken);
-        reloader.Reload();
+        try
+        {
+            reloader.Reload();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Settings were saved but the running configuration could not be reloaded");
+            throw new InvalidOperationException("Saved, but the running configuration could not be reloaded. Check the server log.", ex);
+        }
     }
 
     public static IReadOnlyList<string> Validate(IReadOnlyDictionary<string, string?> values)

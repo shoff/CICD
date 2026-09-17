@@ -3,7 +3,6 @@ using System.Text;
 using System.Text.Json;
 using Cicd.Server.Security;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.Extensions.Options;
 
 namespace Cicd.Server.Tests;
 
@@ -49,7 +48,7 @@ public class V21LoginClientTests
     {
         var options = new IdentityProviderOptions { Authority = Authority, ReturnUrl = CallbackUrl };
         configure?.Invoke(options);
-        return new V21LoginClient(new HttpClient(handler), Options.Create(options), NullLogger<V21LoginClient>.Instance);
+        return new V21LoginClient(new HttpClient(handler), new StaticOptionsMonitor<IdentityProviderOptions>(options), NullLogger<V21LoginClient>.Instance);
     }
 
     private static FakeHandler TokenHandler(object payload, string property = "access_token") =>

@@ -3,15 +3,14 @@ using Cicd.Contracts;
 using Cicd.Core.Users;
 using Cicd.Server.Security;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.Extensions.Options;
 
 namespace Cicd.Server.Tests;
 
 public class RoleRequirementHandlerTests
 {
     private static RoleRequirementHandler Handler(bool configured, string apiToken = "") =>
-        new(Options.Create(new IdentityProviderOptions { Authority = configured ? "https://idp" : "" }),
-            Options.Create(new SecurityOptions { ApiToken = apiToken }));
+        new(new StaticOptionsMonitor<IdentityProviderOptions>(new IdentityProviderOptions { Authority = configured ? "https://idp" : "" }),
+            new StaticOptionsMonitor<SecurityOptions>(new SecurityOptions { ApiToken = apiToken }));
 
     private static ClaimsPrincipal UserWith(params string[] roles) =>
         new(new ClaimsIdentity(roles.Select(r => new Claim(ClaimTypes.Role, r)), "test", ClaimTypes.Name, ClaimTypes.Role));

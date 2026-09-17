@@ -23,7 +23,7 @@ public class UserRevalidatingAuthenticationStateProviderTests : IDisposable
         collection.AddScoped(_ => testDb.Create());
         collection.AddScoped<UserService>();
         collection.AddSingleton<TimeProvider>(clock);
-        collection.AddSingleton(Options.Create(new SecurityOptions()));
+        collection.AddSingleton<IOptionsMonitor<SecurityOptions>>(new StaticOptionsMonitor<SecurityOptions>(new SecurityOptions()));
         services = collection.BuildServiceProvider();
     }
 

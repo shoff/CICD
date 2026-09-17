@@ -45,8 +45,8 @@ public static class Policies
 /// </summary>
 public sealed class TokenAuthenticationHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
-    IOptions<SecurityOptions> security,
-    IOptions<AgentsOptions> agents,
+    IOptionsMonitor<SecurityOptions> security,
+    IOptionsMonitor<AgentsOptions> agents,
     ILoggerFactory loggerFactory,
     UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, loggerFactory, encoder)
 {
@@ -61,11 +61,11 @@ public sealed class TokenAuthenticationHandler(
         }
 
         string? role = null;
-        if (!string.IsNullOrEmpty(agents.Value.AuthToken) && FixedTimeEquals(token, agents.Value.AuthToken))
+        if (!string.IsNullOrEmpty(agents.CurrentValue.AuthToken) && FixedTimeEquals(token, agents.CurrentValue.AuthToken))
         {
             role = Roles.Agent;
         }
-        else if (!string.IsNullOrEmpty(security.Value.ApiToken) && FixedTimeEquals(token, security.Value.ApiToken))
+        else if (!string.IsNullOrEmpty(security.CurrentValue.ApiToken) && FixedTimeEquals(token, security.CurrentValue.ApiToken))
         {
             role = Roles.Admin;
         }

@@ -10,7 +10,7 @@ using Microsoft.Extensions.Options;
 namespace Cicd.Core.PullRequests;
 
 /// <summary>Equivalent of TeamCity's Commit Status Publisher for pull request builds.</summary>
-public sealed class PullRequestStatusNotifier(IServiceScopeFactory scopeFactory, IOptions<CicdServerOptions> options, ILogger<PullRequestStatusNotifier> logger) : INotifier
+public sealed class PullRequestStatusNotifier(IServiceScopeFactory scopeFactory, IOptionsMonitor<CicdServerOptions> options, ILogger<PullRequestStatusNotifier> logger) : INotifier
 {
     public string Id => "pull-request-status";
 
@@ -46,7 +46,7 @@ public sealed class PullRequestStatusNotifier(IServiceScopeFactory scopeFactory,
                 BuildStatus.Canceled => "Build canceled",
                 _ => build.StatusText ?? "Build failed",
             },
-            TargetUrl: $"{options.Value.PublicUrl.TrimEnd('/')}/builds/{build.Id}");
+            TargetUrl: $"{options.CurrentValue.PublicUrl.TrimEnd('/')}/builds/{build.Id}");
         try
         {
             await provider.ReportStatusAsync(rootInfo, report, cancellationToken);

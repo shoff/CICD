@@ -27,7 +27,7 @@ public sealed record LoginResult(LoginOutcome Outcome, ExternalIdentity? Identit
 /// the access token it issues. The token is read, not signature-validated: it is fetched directly from the IdP over
 /// HTTPS in the same request, so its origin is already established. Nothing else from the response is kept.
 /// </summary>
-public sealed class V21LoginClient(HttpClient http, IOptions<IdentityProviderOptions> options, ILogger<V21LoginClient> logger)
+public sealed class V21LoginClient(HttpClient http, IOptionsMonitor<IdentityProviderOptions> options, ILogger<V21LoginClient> logger)
 {
     private static readonly JsonSerializerOptions PascalCase = new() { PropertyNamingPolicy = null };
     private static readonly string[] TokenProperties = ["access_token", "accessToken", "AccessToken", "token", "Token"];
@@ -39,7 +39,7 @@ public sealed class V21LoginClient(HttpClient http, IOptions<IdentityProviderOpt
     /// </summary>
     public async Task<LoginResult> LoginAsync(string username, string password, CancellationToken cancellationToken)
     {
-        var settings = options.Value;
+        var settings = options.CurrentValue;
         var url = settings.EffectiveLoginUrl;
         if (settings.RequireHttpsMetadata && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
         {
