@@ -93,8 +93,9 @@ configuration binder sees a normal array.
 ## Error handling
 
 Validation happens in `SettingsService` before any write: numbers must parse and be ≥ 0, booleans must be true/false,
-unknown keys are rejected, restart-required keys are accepted with the banner. Write failures return the message to
-the page and to the API as a 400 problem. A missing key ring directory is created on startup; a lost key ring makes
+unknown keys are rejected, restart-required keys are accepted with the banner. Rejected values return the message to
+the page and to the API as 400 for validation, 409 when the rows were saved but the running configuration could not be
+reloaded. A missing key ring directory is created on startup; a lost key ring makes
 stored secrets unreadable (logged as an error naming the key) and the page shows them as "unreadable, re-enter".
 
 ## Testing

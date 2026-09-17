@@ -109,8 +109,12 @@ Configuration lives in two places.
 from the current configuration (`appsettings.json`, `appsettings.<Environment>.json`, environment variables). From then
 on the database wins: **changing a managed key through the environment or `appsettings` has no effect** - the database
 configuration source is added last and overrides both. Edit them at Admin -> Settings (admins only) or through
-`GET /api/v1/settings` and `PUT /api/v1/settings`. Changes apply immediately unless the Restart column says otherwise;
-the settings page shows a banner while a restart is pending.
+`GET /api/v1/settings` and `PUT /api/v1/settings`. A change takes effect on the instance that saved it as soon as it is
+saved, unless the Restart column says otherwise; the settings page shows a banner while a restart is pending.
+
+**Multiple instances.** A change reloads only the instance that handled the save. Other instances keep the values they
+read at startup until they are restarted - there is no cross-instance signal yet. Restart the rest of the pool after a
+change that matters, or run one server.
 
 Because seeding only happens once, `appsettings.Development.json` (identity-dev authority, the bootstrap admin,
 auto-authorize) only matters on the very first start against an empty database.
@@ -146,14 +150,18 @@ is read through `IOptionsMonitor` and picks up a change on the next request or t
 
 Settings marked secret above, and VCS root properties (`vcs_roots.properties`), are encrypted with ASP.NET Core Data
 Protection before they are written. The API and the settings page never return a stored secret: they report only
-whether one is set.
+whether one is set. Because a stored secret is never echoed back, leave a secret blank to keep it as it is; to remove
+one, tick **Clear** next to the field on the settings page, or send `null` for that key to `PUT /api/v1/settings`.
 
 The key ring is a set of XML files in `<Server:DataDirectory>/keys`, **unencrypted on disk** (there is no DPAPI on
 Linux and no certificate is configured), so protect that directory with filesystem permissions and **back it up with
 the data directory**. It is load-bearing: without the matching keys every stored secret and every VCS root credential
 becomes unreadable and has to be re-entered. The server logs one error per unreadable key at startup
-(`Setting {Key} cannot be decrypted; it is ignored until re-entered`) and the settings page shows `unreadable,
-re-enter` in the field.
+(`Setting {Key} cannot be decrypted; it is treated as unset until re-entered`) and the settings page shows
+`unreadable, re-enter` in the field. An unreadable secret reads as empty rather than falling back to whatever
+`appsettings` or the environment holds, so authentication fails closed until the value is re-entered. An unreadable
+VCS root credential set loads as no properties at all, and the build log warns
+`VCS root {Name} has no readable credentials`.
 
 The former `Oidc` section is gone. Set `IdentityProvider:Authority`; with it empty the server runs in open mode (or
 token-only mode when `Security:ApiToken` is set).

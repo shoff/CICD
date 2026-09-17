@@ -89,7 +89,14 @@ Configuration comes from two places. The connection string, `Server:DataDirector
   with its own short-lived `PostgresCicdDbContext`, before the service container exists.
   `SettingsConfigurationMapper` does the shaping: secrets are decrypted, and list settings become the indexed children
   the options binder expects (`Plugins:Disabled` stored as `a,b` becomes `Plugins:Disabled:0` and `:1`). A row that
-  cannot be decrypted is logged once and skipped, so the key falls back to its `appsettings` value or default.
+  cannot be decrypted is logged once and emitted as an empty string: the key is treated as unset (fail closed) until it
+  is re-entered, rather than falling back to its `appsettings` value or default - otherwise losing the key ring would
+  silently reinstate a placeholder like `Agents:AuthToken = change-me`.
+- **Shadowing a shorter list.** `ConfigurationRoot` unions the children of every provider, so a stored list that is
+  shorter than the one in `appsettings` would still show the extra entries. `Program.cs` counts the children each list
+  key already has in the lower layers and hands the counts to the source; the mapper then emits an explicit `null` for
+  every index the stored row does not fill, which hides the lower value from the binder (a provider returning true from
+  `TryGet` with a null value wins).
 - **Seeding.** `DatabaseStartup.SeedSettingsAsync` runs before the source is added and inserts one row per cataloged
   key that has none, taking the value from the configuration built so far. It is a first-run operation only: once a
   row exists, `appsettings` and environment values for that key are dead weight.
@@ -97,7 +104,13 @@ Configuration comes from two places. The connection string, `Server:DataDirector
   rows in one `SaveChangesAsync`, then calls `ISettingsReloader.Reload()` - the same provider object, registered as a
   singleton - which re-reads the table and raises the configuration change token. Consumers that take
   `IOptionsMonitor<T>` and read `CurrentValue` per request or per tick therefore see the new value immediately;
-  nothing is cached in a constructor.
+  nothing is cached in a constructor. The reload is local: only the instance that handled the save re-reads the table,
+  and other instances keep their startup values until they are restarted (there is no cross-instance signal yet).
+- **Validation.** Per-key checks (`SettingsService.Validate`) and the cross-field `IdentityProvider` rules
+  (`ValidateAudience` needs an `Audience`; `RequireHttpsMetadata` needs https `Authority` and `LoginUrl`) both run
+  before any write and throw `SettingsValidationException`, which the API answers with 400. The cross-field rules merge
+  the submitted values over the stored ones, because a section can be saved a field at a time. A reload failure after a
+  successful write is the plain `InvalidOperationException` and answers 409: the value is stored but not yet live.
 - **Restart required.** Four `IdentityProvider` keys (`Authority`, `ValidateAudience`, `Audience`,
   `RequireHttpsMetadata`) and `Plugins:Disabled` are read once while the authentication handlers and the plugin host
   are built, so they are flagged `RestartRequired`. `SettingView.RestartPending` compares the stored value with the
@@ -105,10 +118,15 @@ Configuration comes from two places. The connection string, `Server:DataDirector
 - **Secrets.** `DataProtectionSecretProtector` wraps a Data Protection provider rooted at
   `<Server:DataDirectory>/keys`; `SecretCodec` gives stored ciphertext the prefix `enc:v1:` so unprefixed legacy
   plaintext still loads. Secret settings are encrypted on write, and the API and UI never echo one back - `SettingView`
-  reports a mask plus `IsSet`/`Unreadable`. An empty value in an update means "leave unchanged".
+  reports a mask plus `IsSet`/`Unreadable`. In an update an empty value for a secret means "leave unchanged" and null
+  means "clear it" (the row is kept with an empty value); the settings page sends null when the field's Clear box is
+  ticked.
 - **VCS root converter.** `HasProtectedJsonConversion` (Core, `CicdDbContext`) is an EF value converter that serializes
   `VcsRoot.Properties` to JSON and then protects it, which is why the column is `text`. `PostgresCicdDbContext` takes
-  the `ISecretProtector` in its constructor for that reason. `DatabaseStartup.EncryptLegacyVcsRootsAsync` runs on every
+  the `ISecretProtector` in its constructor for that reason. Decoding goes through `ProtectedJson.DecodeProperties`, a
+  static method (value converters must be expression trees) that never throws: a row whose ciphertext cannot be read
+  loads as an empty dictionary, and `BuildJobFactory` logs `VCS root {Name} has no readable credentials` when it puts
+  such a root into a job. `DatabaseStartup.EncryptLegacyVcsRootsAsync` runs on every
   boot and re-saves any row whose value is still plaintext; it is a no-op once they are all encrypted. The migration's
   `Down` is not reversible once rows are encrypted, because ciphertext is not valid `jsonb`.
 - **Loss of the key ring** makes every secret unreadable: startup logs one error per row and the settings page shows

@@ -29,6 +29,10 @@ services:
       ASPNETCORE_FORWARDEDHEADERS_ENABLED: "true"
       ConnectionStrings__Cicd: "Host=postgres;Port=5432;Database=cicd;Username=cicd;Password=${POSTGRES_PASSWORD:-cicd}"
       Server__PublicUrl: ${SERVER_PUBLIC_URL:-http://localhost:8080}
+      # The four secrets below seed the settings table on the very first start against an empty database only.
+      # Afterwards the stored row wins and changing them here has no effect: change them at Admin -> Settings.
+      # AGENT_AUTH_TOKEN still configures the agent containers below, so to rotate it change the server value at
+      # Admin -> Settings first, then update .env and recreate the agents.
       Agents__AuthToken: ${AGENT_AUTH_TOKEN:?set AGENT_AUTH_TOKEN in .env}
       Agents__AutoAuthorize: ${AGENT_AUTO_AUTHORIZE:-false}
       Security__ApiToken: ${API_TOKEN:-}
