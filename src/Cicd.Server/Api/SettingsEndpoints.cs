@@ -13,12 +13,23 @@ public static class SettingsEndpoints
 
         group.MapPut("/", async Task<IResult> (UpdateSettingsRequest request, SettingsService settings, ClaimsPrincipal caller, CancellationToken ct) =>
         {
+            if (request.Values is null || request.Values.Count == 0)
+            {
+                return Results.ValidationProblem(new Dictionary<string, string[]> { ["settings"] = ["Provide at least one value."] });
+            }
             var errors = SettingsService.Validate(request.Values);
             if (errors.Count > 0)
             {
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["settings"] = [.. errors] });
             }
-            await settings.UpdateAsync(request.Values, caller.Identity?.Name ?? "api-token", ct);
+            try
+            {
+                await settings.UpdateAsync(request.Values, caller.Identity?.Name ?? "api-token", ct);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.Problem(ex.Message, statusCode: StatusCodes.Status409Conflict);
+            }
             return Results.NoContent();
         });
     }

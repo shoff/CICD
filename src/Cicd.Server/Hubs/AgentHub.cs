@@ -10,10 +10,10 @@ namespace Cicd.Server.Hubs;
 
 /// <summary>Agent-facing hub. Agents authenticate with the shared agent token.</summary>
 [Authorize(Policy = Policies.Agent)]
-public sealed class AgentHub(AgentService agents, BuildProgressService progress, AgentConnectionRegistry connections, IOptions<AgentsOptions> options, ILogger<AgentHub> logger) : Hub
+public sealed class AgentHub(AgentService agents, BuildProgressService progress, AgentConnectionRegistry connections, IOptionsMonitor<AgentsOptions> options, ILogger<AgentHub> logger) : Hub
 {
     public Task<AgentRegistrationResult> Register(AgentRegistration registration) =>
-        agents.RegisterAsync(registration, Context.ConnectionId, options.Value.AutoAuthorize, Context.ConnectionAborted);
+        agents.RegisterAsync(registration, Context.ConnectionId, options.CurrentValue.AutoAuthorize, Context.ConnectionAborted);
 
     public Task Heartbeat()
     {
