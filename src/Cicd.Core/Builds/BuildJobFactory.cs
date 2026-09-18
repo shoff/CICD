@@ -54,8 +54,9 @@ public sealed class BuildJobFactory(IEnumerable<IVcsProvider> vcsProviders, ILog
 
         if (root is not null && root.Properties.Count == 0)
         {
-            // Either none were set, or the stored credentials could not be decrypted (see ProtectedJson.DecodeProperties).
-            logger.LogWarning("VCS root {Name} has no readable credentials", root.Name);
+            // Either none were set (a public repository), or the stored credentials could not be decrypted, in which
+            // case startup already logged an error naming this root (see ProtectedJson.UnreadableVcsRootsAsync).
+            logger.LogWarning("VCS root {Name} has no credentials, or they could not be decrypted", root.Name);
         }
 
         return new BuildJob

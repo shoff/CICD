@@ -133,8 +133,9 @@ Configuration comes from two places. The connection string, `Server:DataDirector
   `VcsRoot.Properties` to JSON and then protects it, which is why the column is `text`. `PostgresCicdDbContext` takes
   the `ISecretProtector` in its constructor for that reason. Decoding goes through `ProtectedJson.DecodeProperties`, a
   static method (value converters must be expression trees) that never throws: a row whose ciphertext cannot be read
-  loads as an empty dictionary, and `BuildJobFactory` logs `VCS root {Name} has no readable credentials` when it puts
-  such a root into a job. `DatabaseStartup.EncryptLegacyVcsRootsAsync` runs on every
+  loads as an empty dictionary. Because the converter has to stay silent, `DatabaseStartup.UnreadableVcsRootsAsync`
+  checks every encrypted row once at startup and the host logs an error naming each root it cannot decrypt.
+  `DatabaseStartup.EncryptLegacyVcsRootsAsync` runs on every
   boot and re-saves any row whose value is still plaintext; it is a no-op once they are all encrypted. The migration's
   `Down` is not reversible once rows are encrypted, because ciphertext is not valid `jsonb`.
 - **Loss of the key ring** makes every secret unreadable: startup logs one error per row and the settings page shows

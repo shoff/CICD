@@ -52,6 +52,13 @@ public static class DatabaseStartup
         return ids.Count;
     }
 
+    /// <summary>Names of the VCS roots whose credentials the current key ring cannot decrypt, for the startup log.</summary>
+    public static async Task<IReadOnlyList<string>> UnreadableVcsRootsAsync(string connectionString, ISecretProtector protector, CancellationToken cancellationToken = default)
+    {
+        await using var db = Create(connectionString, protector);
+        return await Cicd.Core.Persistence.ProtectedJson.UnreadableVcsRootsAsync(db, protector, cancellationToken);
+    }
+
     private static PostgresCicdDbContext Create(string connectionString, ISecretProtector protector) =>
         new(PostgresServiceCollectionExtensions.Configure(new DbContextOptionsBuilder<PostgresCicdDbContext>(), connectionString).Options, protector);
 }

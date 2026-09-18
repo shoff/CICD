@@ -57,6 +57,32 @@ public class VcsRootProtectionTests
     }
 
     [Fact]
+    public async Task Startup_check_names_only_the_roots_whose_credentials_cannot_be_decrypted()
+    {
+        using var testDb = new TestDb(new PickyProtector());
+        await using var db = testDb.Create();
+        var project = new Project { Name = "p" };
+        db.Projects.Add(project);
+        db.VcsRoots.Add(Root(project.Id));
+        await db.SaveChangesAsync();
+        const string insert = "insert into vcs_roots (Id, ProjectId, Name, ProviderId, Url, DefaultBranch, Properties, CreatedAt) values ({0}, {1}, {2}, 'git', 'https://example.com/l.git', 'main', {3}, {4})";
+        await db.Database.ExecuteSqlRawAsync(insert, Guid.NewGuid(), project.Id, "lost-keys", "enc:v1:garbage", DateTimeOffset.UtcNow);
+        await db.Database.ExecuteSqlRawAsync(insert, Guid.NewGuid(), project.Id, "legacy", """{"git.password":"old"}""", DateTimeOffset.UtcNow);
+
+        var unreadable = await Cicd.Core.Persistence.ProtectedJson.UnreadableVcsRootsAsync(db, new PickyProtector(), CancellationToken.None);
+
+        Assert.Equal(["lost-keys"], unreadable);
+    }
+
+    /// <summary>Reads what it wrote and nothing else, like a key ring that has lost an older key.</summary>
+    private sealed class PickyProtector : Cicd.Core.Settings.ISecretProtector
+    {
+        public string Protect(string plaintext) => "ok:" + plaintext;
+        public string Unprotect(string ciphertext) =>
+            ciphertext.StartsWith("ok:", StringComparison.Ordinal) ? ciphertext[3..] : throw new InvalidOperationException("no key");
+    }
+
+    [Fact]
     public async Task Legacy_plaintext_json_still_loads()
     {
         using var testDb = new TestDb(new ReversingProtector());

@@ -153,6 +153,33 @@ public static class ProtectedJson
             return [];
         }
     }
+
+    /// <summary>
+    /// Names of the VCS roots whose stored credentials cannot be decrypted. <see cref="DecodeProperties"/> has to stay
+    /// silent, because it runs inside a value converter on every load, so the host asks once at startup and logs an
+    /// error per root - the same report an undecryptable setting gets.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> UnreadableVcsRootsAsync(CicdDbContext db, ISecretProtector protector, CancellationToken cancellationToken)
+    {
+        var stored = await db.Database
+            .SqlQueryRaw<StoredVcsRoot>("select name as \"Name\", properties as \"Properties\" from vcs_roots where properties like 'enc:v1:%'")
+            .ToListAsync(cancellationToken);
+        var unreadable = new List<string>();
+        foreach (var root in stored)
+        {
+            try
+            {
+                SecretCodec.Decode(protector, root.Properties);
+            }
+            catch (Exception)
+            {
+                unreadable.Add(root.Name);
+            }
+        }
+        return unreadable;
+    }
+
+    private sealed record StoredVcsRoot(string Name, string Properties);
 }
 
 internal static class JsonPropertyExtensions

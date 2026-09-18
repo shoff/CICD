@@ -163,8 +163,9 @@ environment holds nor reads as empty - an empty `Security:ApiToken` would mean o
 `GitHub:WebhookSecret` would skip signature checks. It is replaced by a random value nobody can present, so the API
 token, agent token and webhook signature all fail closed until the value is re-entered. If the static API token was
 the only way in, sign in through the identity provider, or restore the key ring, to re-enter it. An unreadable
-VCS root credential set loads as no properties at all, and the server log warns
-`VCS root {Name} has no readable credentials`.
+VCS root credential set loads as no properties at all. The server log names each such root at startup
+(`VCS root {Name} has credentials that cannot be decrypted`). Nothing rewrites the stored ciphertext, so restoring the
+key ring brings the credentials back; otherwise recreate the root, since there is no edit for an existing one yet.
 
 The former `Oidc` section is gone. Set `IdentityProvider:Authority`; with it empty the server runs in open mode (or
 token-only mode when `Security:ApiToken` is set).

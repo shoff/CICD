@@ -44,6 +44,10 @@ using (var startupLoggers = LoggerFactory.Create(l => l.AddSimpleConsole()))
         {
             startupLogger.LogInformation("Encrypted {Count} VCS root credential sets", encrypted);
         }
+        foreach (var name in await DatabaseStartup.UnreadableVcsRootsAsync(connectionString, secretProtector))
+        {
+            startupLogger.LogError("VCS root {Name} has credentials that cannot be decrypted; restore the key ring or recreate the root", name);
+        }
         // The child keys each list has in appsettings and the environment. The providers are captured before the
         // database source is added, so the answer never includes the database's own entries, and they are asked on
         // every load, so an entry added to appsettings.json while running is shadowed from the next save onwards.
