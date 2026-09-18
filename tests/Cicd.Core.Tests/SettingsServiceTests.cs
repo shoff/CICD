@@ -10,7 +10,15 @@ public sealed class FakeReloader : ISettingsReloader
     public Dictionary<string, string?> Startup { get; } = new(StringComparer.OrdinalIgnoreCase);
     public int Reloads { get; private set; }
     public IReadOnlyDictionary<string, string?> ValuesAtStartup => Startup;
-    public void Reload() => Reloads++;
+    public bool FailReload { get; set; }
+    public void Reload()
+    {
+        Reloads++;
+        if (FailReload)
+        {
+            throw new InvalidOperationException("binder says no");
+        }
+    }
 }
 
 public class SettingsServiceTests : IDisposable
@@ -102,6 +110,18 @@ public class SettingsServiceTests : IDisposable
         Assert.True(view.Unreadable);
         Assert.False(view.IsSet);
         Assert.Equal("", view.Value);
+    }
+
+    [Fact]
+    public async Task A_failed_reload_is_reported_as_saved_but_not_reloaded()
+    {
+        await using var db = testDb.Create();
+        reloader.FailReload = true;
+        // Its own type: callers tell "stored, not live" (409) apart from any other InvalidOperationException, which
+        // EF also throws and which does not mean the values were stored.
+        await Assert.ThrowsAsync<SettingsReloadException>(() => Service(db).UpdateAsync(
+            new Dictionary<string, string?> { ["Server:PublicUrl"] = "http://x" }, null, CancellationToken.None));
+        Assert.Equal("http://x", (await db.Settings.SingleAsync(s => s.Key == "Server:PublicUrl")).Value);
     }
 
     [Fact]

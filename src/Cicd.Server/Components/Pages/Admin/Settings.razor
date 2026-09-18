@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = Policies.Admin)]
 @inherits SecurePage
 @inject IServiceScopeFactory Scopes
+@inject ILogger<Settings> Logger
 
 <PageTitle>Settings - CICD</PageTitle>
 <h1>Settings</h1>
@@ -102,9 +103,15 @@
             await scope.ServiceProvider.GetRequiredService<SettingsService>().UpdateAsync(values, name, CancellationToken.None);
             saved = section;
         }
-        catch (InvalidOperationException ex)
+        catch (Exception ex) when (ex is SettingsValidationException or SettingsReloadException)
         {
             error = ex.Message;
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or Microsoft.EntityFrameworkCore.DbUpdateException)
+        {
+            // Not one of ours, so nothing says the values were stored. Without this the circuit would die.
+            Logger.LogError(ex, "Saving the {Section} settings failed", section);
+            error = "The settings could not be saved. Check the server log.";
         }
         await LoadAsync();
     }

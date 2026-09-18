@@ -31,8 +31,9 @@ public static class SettingsEndpoints
                 // Rejected before any write, including the cross-field rules the per-key Validate above cannot see.
                 return Results.ValidationProblem(new Dictionary<string, string[]> { ["settings"] = [ex.Message] });
             }
-            catch (InvalidOperationException ex)
+            catch (SettingsReloadException ex)
             {
+                // Stored but not live. Anything else is a real failure and surfaces as a 500, not as "saved".
                 return Results.Problem(ex.Message, statusCode: StatusCodes.Status409Conflict);
             }
             return Results.NoContent();

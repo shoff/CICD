@@ -17,6 +17,12 @@ public sealed record SettingView(SettingDefinition Definition, string Value, boo
 /// <summary>A rejected update: nothing was written. Separated from the reload failure so the API can answer 400, not 409.</summary>
 public sealed class SettingsValidationException(string message) : InvalidOperationException(message);
 
+/// <summary>
+/// The values were stored but the running configuration could not be reloaded. Its own type so callers do not report
+/// every <see cref="InvalidOperationException"/> - EF throws those too - as "saved".
+/// </summary>
+public sealed class SettingsReloadException(string message, Exception inner) : InvalidOperationException(message, inner);
+
 public sealed class SettingsService(CicdDbContext db, ISecretProtector protector, ISettingsReloader reloader, TimeProvider clock, ILogger<SettingsService> logger)
 {
     public const string Mask = "********";
@@ -120,7 +126,7 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
         catch (Exception ex)
         {
             logger.LogError(ex, "Settings were saved but the running configuration could not be reloaded");
-            throw new InvalidOperationException("Saved, but the running configuration could not be reloaded. Check the server log.", ex);
+            throw new SettingsReloadException("Saved, but the running configuration could not be reloaded. Check the server log.", ex);
         }
     }
 
