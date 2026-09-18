@@ -13,11 +13,22 @@ namespace Cicd.Core.Services;
 
 public static class CoreServiceCollectionExtensions
 {
+    /// <summary>
+    /// Binds <see cref="SecurityOptions"/>. The settings provider hides a lower-layer list entry by emitting a null
+    /// child, which the binder turns into a null element, so those are stripped before anything reads the list.
+    /// </summary>
+    public static IServiceCollection AddSecurityOptions(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.Configure<SecurityOptions>(configuration.GetSection(SecurityOptions.SectionName));
+        services.PostConfigure<SecurityOptions>(options => options.BootstrapAdmins.RemoveAll(string.IsNullOrWhiteSpace));
+        return services;
+    }
+
     /// <summary>Registers orchestration services. The host must also register a <see cref="CicdDbContext"/>, an <see cref="IAgentChannel"/> and an <see cref="IBuildEventPublisher"/>.</summary>
     public static IServiceCollection AddCicdCore(this IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<CicdServerOptions>(configuration.GetSection(CicdServerOptions.SectionName));
-        services.Configure<SecurityOptions>(configuration.GetSection(SecurityOptions.SectionName));
+        services.AddSecurityOptions(configuration);
         services.AddScoped<UserService>();
         services.AddScoped<SettingsService>();
         services.TryAddSingleton(TimeProvider.System);

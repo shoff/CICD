@@ -1,6 +1,10 @@
 using Cicd.Core.Entities;
+using Cicd.Core.Services;
 using Cicd.Core.Settings;
+using Cicd.Core.Users;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 
 namespace Cicd.Core.Tests;
 
@@ -67,7 +71,7 @@ public class SettingsConfigurationMapperTests
     {
         var rows = new[] { new Setting { Key = "Security:BootstrapAdmins", Value = "" } };
         var config = SettingsConfigurationMapper.ToConfiguration(
-            rows, protector, new Dictionary<string, int> { ["Security:BootstrapAdmins"] = 2 }, null);
+            rows, protector, Shadowed("0", "1"), null);
         Assert.True(config.ContainsKey("Security:BootstrapAdmins:0"));
         Assert.True(config.ContainsKey("Security:BootstrapAdmins:1"));
         Assert.Null(config["Security:BootstrapAdmins:0"]);
@@ -79,10 +83,21 @@ public class SettingsConfigurationMapperTests
     {
         var rows = new[] { new Setting { Key = "Security:BootstrapAdmins", Value = "new" } };
         var config = SettingsConfigurationMapper.ToConfiguration(
-            rows, protector, new Dictionary<string, int> { ["Security:BootstrapAdmins"] = 2 }, null);
+            rows, protector, Shadowed("0", "1"), null);
         Assert.Equal("new", config["Security:BootstrapAdmins:0"]);
         Assert.Null(config["Security:BootstrapAdmins:1"]);
         Assert.False(config.ContainsKey("Security:BootstrapAdmins:2"));
+    }
+
+    [Fact]
+    public void Lower_layer_indices_are_shadowed_by_key_not_by_count()
+    {
+        // Security__BootstrapAdmins__5 in the environment: one child, but its key is not "0".
+        var rows = new[] { new Setting { Key = "Security:BootstrapAdmins", Value = "new" } };
+        var config = SettingsConfigurationMapper.ToConfiguration(rows, protector, Shadowed("0", "5"), null);
+        Assert.Equal("new", config["Security:BootstrapAdmins:0"]);
+        Assert.True(config.ContainsKey("Security:BootstrapAdmins:5"));
+        Assert.Null(config["Security:BootstrapAdmins:5"]);
     }
 
     [Fact]
@@ -91,17 +106,24 @@ public class SettingsConfigurationMapperTests
         var mapped = SettingsConfigurationMapper.ToConfiguration(
             [new Setting { Key = "Security:BootstrapAdmins", Value = "" }],
             protector,
-            new Dictionary<string, int> { ["Security:BootstrapAdmins"] = 1 },
+            Shadowed("0", "7"),
             null);
         var configuration = new ConfigurationBuilder()
-            .AddInMemoryCollection([new KeyValuePair<string, string?>("Security:BootstrapAdmins:0", "a@x.com")])
+            .AddInMemoryCollection([
+                new KeyValuePair<string, string?>("Security:BootstrapAdmins:0", "a@x.com"),
+                new KeyValuePair<string, string?>("Security:BootstrapAdmins:7", "b@x.com")])
             .Add(new StubSource(mapped))
             .Build();
-        var admins = (configuration.GetSection("Security:BootstrapAdmins").Get<string[]>() ?? [])
-            .Where(value => !string.IsNullOrEmpty(value))
-            .ToList();
+        // Bound the way the host binds it. The binder turns a shadowed (null) child into a null element, which the
+        // options registration strips, so no filtering here: this asserts what UserService actually sees.
+        var services = new ServiceCollection();
+        services.AddSecurityOptions(configuration);
+        var admins = services.BuildServiceProvider().GetRequiredService<IOptions<SecurityOptions>>().Value.BootstrapAdmins;
         Assert.Empty(admins);
     }
+
+    private static Dictionary<string, IReadOnlyCollection<string>> Shadowed(params string[] childKeys) =>
+        new(StringComparer.OrdinalIgnoreCase) { ["Security:BootstrapAdmins"] = childKeys };
 
     [Fact]
     public void Join_and_split_round_trip()

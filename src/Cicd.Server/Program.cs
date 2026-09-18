@@ -44,16 +44,21 @@ using (var startupLoggers = LoggerFactory.Create(l => l.AddSimpleConsole()))
         {
             startupLogger.LogInformation("Encrypted {Count} VCS root credential sets", encrypted);
         }
-        // How many entries each list key has in appsettings and the environment, read before the database source is
-        // added. The provider needs it to shadow those entries when the stored list is shorter or empty.
-        var shadowedListLengths = SettingsCatalog.All
+        // The child keys each list has in appsettings and the environment. The providers are captured before the
+        // database source is added, so the answer never includes the database's own entries, and they are asked on
+        // every load, so an entry added to appsettings.json while running is shadowed from the next save onwards.
+        var lowerLayers = ((IConfigurationRoot)builder.Configuration).Providers.ToList();
+        IReadOnlyDictionary<string, IReadOnlyCollection<string>> ShadowedListKeys() => SettingsCatalog.All
             .Where(definition => definition.Kind == SettingKind.List)
             .ToDictionary(
                 definition => definition.Key,
-                definition => builder.Configuration.GetSection(definition.Key).GetChildren().Count(),
+                definition => (IReadOnlyCollection<string>)lowerLayers
+                    .SelectMany(provider => provider.GetChildKeys([], definition.Key))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList(),
                 StringComparer.OrdinalIgnoreCase);
         settingsSource = new DatabaseSettingsConfigurationSource(
-            connectionString, secretProtector, shadowedListLengths, startupLoggers.CreateLogger("Settings"));
+            connectionString, secretProtector, ShadowedListKeys, startupLoggers.CreateLogger("Settings"));
         // Inside the try: adding the source triggers the provider's first Load(), which reads the table.
         builder.Configuration.Sources.Add(settingsSource);
     }

@@ -97,10 +97,14 @@ Configuration comes from two places. The connection string, `Server:DataDirector
   every read of its options section throw. `SettingDefinition.Accepts` is the single rule validation, the seeder and
   the mapper share.
 - **Shadowing a shorter list.** `ConfigurationRoot` unions the children of every provider, so a stored list that is
-  shorter than the one in `appsettings` would still show the extra entries. `Program.cs` counts the children each list
-  key already has in the lower layers and hands the counts to the source; the mapper then emits an explicit `null` for
-  every index the stored row does not fill, which hides the lower value from the binder (a provider returning true from
-  `TryGet` with a null value wins).
+  shorter than the one in `appsettings` would still show the extra entries. `Program.cs` captures the lower-layer
+  providers before the source is added and hands the source a function returning the child keys each list has in them;
+  the provider asks it on every load, because `appsettings.json` reloads on change. The mapper emits an explicit `null`
+  for every lower child the stored row does not fill, which hides the lower value (a provider returning true from
+  `TryGet` with a null value wins). Children are matched by key rather than counted, since the environment can define
+  `Security__BootstrapAdmins__5` on its own. The binder turns a null child into a null list element, so
+  `AddSecurityOptions` strips those after binding. An entry added to `appsettings.json` while the server runs is
+  shadowed from the next settings save or restart, not instantly.
 - **Seeding.** `DatabaseStartup.SeedSettingsAsync` runs before the source is added and inserts one row per cataloged
   key that has none, taking the value from the configuration built so far. It is a first-run operation only: once a
   row exists, `appsettings` and environment values for that key are dead weight.

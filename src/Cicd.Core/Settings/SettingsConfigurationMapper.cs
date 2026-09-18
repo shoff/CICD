@@ -6,7 +6,7 @@ namespace Cicd.Core.Settings;
 /// <summary>Turns settings rows into configuration keys: secrets decoded, lists expanded to indexed children.</summary>
 public static class SettingsConfigurationMapper
 {
-    private static readonly Dictionary<string, int> NoShadowedLists = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, IReadOnlyCollection<string>> NoShadowedLists = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Stands in for a secret that cannot be decrypted. Random per process, so no presented token or webhook
@@ -18,14 +18,16 @@ public static class SettingsConfigurationMapper
         ToConfiguration(rows, protector, NoShadowedLists, logger);
 
     /// <summary>
-    /// <paramref name="shadowedListLengths"/> maps a list key to the number of indices the lower configuration layers
-    /// define. <see cref="Microsoft.Extensions.Configuration.ConfigurationRoot"/> unions the children of every provider,
+    /// <paramref name="shadowedListKeys"/> maps a list key to the child keys the lower configuration layers define for
+    /// it. <see cref="Microsoft.Extensions.Configuration.ConfigurationRoot"/> unions the children of every provider,
     /// so a shrunk or cleared list would still show the entries appsettings or the environment contributed. Emitting an
-    /// explicit null for each index this row does not fill hides the lower value from the binder: a provider that
-    /// returns true from TryGet with a null value wins, and a null child binds to nothing.
+    /// explicit null for each lower child this row does not fill hides the lower value: a provider that returns true
+    /// from TryGet with a null value wins. Children are matched by key, not counted, because the lower layers need not
+    /// be contiguous (<c>Security__BootstrapAdmins__5</c>). The binder turns such a child into a null element, so the
+    /// options registration strips nulls (see <c>AddSecurityOptions</c>).
     /// </summary>
     public static IDictionary<string, string?> ToConfiguration(
-        IEnumerable<Setting> rows, ISecretProtector protector, IReadOnlyDictionary<string, int> shadowedListLengths, ILogger? logger)
+        IEnumerable<Setting> rows, ISecretProtector protector, IReadOnlyDictionary<string, IReadOnlyCollection<string>> shadowedListKeys, ILogger? logger)
     {
         var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
         foreach (var row in rows)
@@ -60,10 +62,9 @@ public static class SettingsConfigurationMapper
                 {
                     result[$"{row.Key}:{i}"] = items[i];
                 }
-                var shadowed = shadowedListLengths.TryGetValue(row.Key, out var length) ? length : 0;
-                for (var i = items.Count; i < Math.Max(shadowed, items.Count); i++)
+                foreach (var childKey in shadowedListKeys.TryGetValue(row.Key, out var childKeys) ? childKeys : [])
                 {
-                    result[$"{row.Key}:{i}"] = null;
+                    result.TryAdd($"{row.Key}:{childKey}", null);
                 }
                 continue;
             }
