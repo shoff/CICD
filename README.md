@@ -157,10 +157,13 @@ The key ring is a set of XML files in `<Server:DataDirectory>/keys`, **unencrypt
 Linux and no certificate is configured), so protect that directory with filesystem permissions and **back it up with
 the data directory**. It is load-bearing: without the matching keys every stored secret and every VCS root credential
 becomes unreadable and has to be re-entered. The server logs one error per unreadable key at startup
-(`Setting {Key} cannot be decrypted; it is treated as unset until re-entered`) and the settings page shows
-`unreadable, re-enter` in the field. An unreadable secret reads as empty rather than falling back to whatever
-`appsettings` or the environment holds, so authentication fails closed until the value is re-entered. An unreadable
-VCS root credential set loads as no properties at all, and the build log warns
+(`Setting {Key} cannot be decrypted; nothing will match it until it is re-entered`) and the settings page shows
+`unreadable, re-enter` in the field. An unreadable secret neither falls back to whatever `appsettings` or the
+environment holds nor reads as empty - an empty `Security:ApiToken` would mean open mode and an empty
+`GitHub:WebhookSecret` would skip signature checks. It is replaced by a random value nobody can present, so the API
+token, agent token and webhook signature all fail closed until the value is re-entered. If the static API token was
+the only way in, sign in through the identity provider, or restore the key ring, to re-enter it. An unreadable
+VCS root credential set loads as no properties at all, and the server log warns
 `VCS root {Name} has no readable credentials`.
 
 The former `Oidc` section is gone. Set `IdentityProvider:Authority`; with it empty the server runs in open mode (or

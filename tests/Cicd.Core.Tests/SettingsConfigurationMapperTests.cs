@@ -42,9 +42,24 @@ public class SettingsConfigurationMapperTests
         var throwing = new ThrowingProtector();
         var rows = new[] { new Setting { Key = "GitHub:Token", Value = "enc:v1:garbage", IsSecret = true } };
         var config = SettingsConfigurationMapper.ToConfiguration(rows, throwing);
-        // Fail closed: the key is present and empty, so the appsettings value cannot show through.
+        // Fail closed: the key is present, so the appsettings value cannot show through, and it is not empty,
+        // because consumers read an empty token or webhook secret as "protection switched off".
         Assert.True(config.ContainsKey("GitHub:Token"));
-        Assert.Equal("", config["GitHub:Token"]);
+        Assert.Equal(SettingsConfigurationMapper.UnreadableSecret, config["GitHub:Token"]);
+        Assert.StartsWith("unreadable:", SettingsConfigurationMapper.UnreadableSecret);
+        Assert.True(SettingsConfigurationMapper.UnreadableSecret.Length > 40);
+    }
+
+    [Theory]
+    [InlineData("Server:DispatchIntervalSeconds", "", "2")]
+    [InlineData("Server:DispatchIntervalSeconds", "soon", "2")]
+    [InlineData("IdentityProvider:TimeoutSeconds", "-1", "15")]
+    [InlineData("IdentityProvider:RequireHttpsMetadata", "", "true")]
+    [InlineData("Agents:AutoAuthorize", "yes", "false")]
+    public void A_typed_value_the_binder_cannot_read_maps_to_the_catalog_default(string key, string stored, string expected)
+    {
+        var config = SettingsConfigurationMapper.ToConfiguration([new Setting { Key = key, Value = stored }], protector);
+        Assert.Equal(expected, config[key]);
     }
 
     [Fact]

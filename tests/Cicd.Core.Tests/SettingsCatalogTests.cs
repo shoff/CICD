@@ -25,5 +25,13 @@ public class SettingsCatalogTests
     }
 
     [Fact]
+    public void Every_number_and_boolean_has_a_default_the_binder_can_read()
+    {
+        // The seeder and the configuration mapper fall back to it, so it must exist and be valid itself.
+        var typed = SettingsCatalog.All.Where(d => d.Kind is SettingKind.Number or SettingKind.Boolean);
+        Assert.All(typed, d => Assert.True(d.DefaultValue is not null && d.Accepts(d.DefaultValue), d.Key));
+    }
+
+    [Fact]
     public void Find_is_case_insensitive() => Assert.NotNull(SettingsCatalog.Find("github:token"));
 }

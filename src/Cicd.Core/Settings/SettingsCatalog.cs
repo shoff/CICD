@@ -16,7 +16,20 @@ public enum SettingKind
 /// </summary>
 public sealed record SettingDefinition(
     string Key, string Section, string DisplayName, string Description, SettingKind Kind,
-    bool RestartRequired = false, string? DefaultValue = null);
+    bool RestartRequired = false, string? DefaultValue = null)
+{
+    /// <summary>
+    /// Whether the configuration binder can read <paramref name="value"/> for this kind. An empty number or boolean
+    /// cannot be bound, and one such value makes every read of its options section throw. Validation, the seeder and
+    /// the configuration mapper all apply this one rule.
+    /// </summary>
+    public bool Accepts(string value) => Kind switch
+    {
+        SettingKind.Number => int.TryParse(value, out var number) && number >= 0,
+        SettingKind.Boolean => bool.TryParse(value, out _),
+        _ => true,
+    };
+}
 
 /// <summary>Every key the settings page, API and seeder manage. Anything not listed stays in appsettings.</summary>
 public static class SettingsCatalog

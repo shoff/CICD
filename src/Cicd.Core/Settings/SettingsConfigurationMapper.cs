@@ -8,6 +8,12 @@ public static class SettingsConfigurationMapper
 {
     private static readonly Dictionary<string, int> NoShadowedLists = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Stands in for a secret that cannot be decrypted. Random per process, so no presented token or webhook
+    /// signature can match it, and non-empty, so consumers do not read it as "not configured".
+    /// </summary>
+    public static string UnreadableSecret { get; } = "unreadable:" + Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
+
     public static IDictionary<string, string?> ToConfiguration(IEnumerable<Setting> rows, ISecretProtector protector, ILogger? logger = null) =>
         ToConfiguration(rows, protector, NoShadowedLists, logger);
 
@@ -32,10 +38,19 @@ public static class SettingsConfigurationMapper
             }
             catch (Exception ex)
             {
-                // Fail closed: an empty string still shadows the appsettings or environment value, so an unreadable
-                // secret reads as unset instead of silently falling back to a default like "change-me".
-                logger?.LogError(ex, "Setting {Key} cannot be decrypted; it is treated as unset until re-entered", row.Key);
-                result[row.Key] = "";
+                // Fail closed. The key still shadows the appsettings or environment value, and it is not empty: an
+                // empty Security:ApiToken means open mode and an empty GitHub:WebhookSecret skips signature checks,
+                // so "unset" would switch protection off. A value nobody can present makes every comparison fail.
+                logger?.LogError(ex, "Setting {Key} cannot be decrypted; nothing will match it until it is re-entered", row.Key);
+                result[row.Key] = UnreadableSecret;
+                continue;
+            }
+            if (definition is not null && !definition.Accepts(value))
+            {
+                // Last line of defence for a row written by hand or by an older build: one unbindable number or
+                // boolean would make every read of its options section throw, including the page that fixes it.
+                logger?.LogError("Setting {Key} holds a value that is not a valid {Kind}; using the default until it is corrected", row.Key, definition.Kind);
+                result[row.Key] = definition.DefaultValue;
                 continue;
             }
             if (definition?.Kind == SettingKind.List)

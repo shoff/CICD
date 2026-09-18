@@ -80,6 +80,30 @@ public class SettingsServiceTests : IDisposable
         Assert.Empty(SettingsService.Validate(new Dictionary<string, string?> { ["Agents:AutoAuthorize"] = "TRUE", ["Server:PublicUrl"] = "" }));
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void Validation_rejects_an_empty_number(string? value)
+    {
+        // The binder cannot read "" as an int: a stored empty number breaks every IOptionsMonitor read of its section.
+        var errors = SettingsService.Validate(new Dictionary<string, string?> { ["IdentityProvider:TimeoutSeconds"] = value });
+        Assert.Single(errors);
+    }
+
+    [Fact]
+    public async Task Read_reports_an_undecryptable_secret_without_leaking_it()
+    {
+        await using var db = testDb.Create();
+        db.Settings.Add(new Setting { Key = "Security:ApiToken", Value = "enc:v1:garbage", IsSecret = true });
+        await db.SaveChangesAsync();
+        var service = new SettingsService(db, new ThrowingProtector(), reloader, clock, NullLogger<SettingsService>.Instance);
+        var view = (await service.GetAllAsync(CancellationToken.None)).Single(v => v.Definition.Key == "Security:ApiToken");
+        Assert.True(view.Unreadable);
+        Assert.False(view.IsSet);
+        Assert.Equal("", view.Value);
+    }
+
     [Fact]
     public async Task Null_secret_clears_it()
     {

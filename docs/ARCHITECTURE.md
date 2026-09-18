@@ -89,9 +89,13 @@ Configuration comes from two places. The connection string, `Server:DataDirector
   with its own short-lived `PostgresCicdDbContext`, before the service container exists.
   `SettingsConfigurationMapper` does the shaping: secrets are decrypted, and list settings become the indexed children
   the options binder expects (`Plugins:Disabled` stored as `a,b` becomes `Plugins:Disabled:0` and `:1`). A row that
-  cannot be decrypted is logged once and emitted as an empty string: the key is treated as unset (fail closed) until it
-  is re-entered, rather than falling back to its `appsettings` value or default - otherwise losing the key ring would
-  silently reinstate a placeholder like `Agents:AuthToken = change-me`.
+  cannot be decrypted is logged once and emitted as a per-process random value (fail closed) until it is re-entered.
+  It must not fall back to its `appsettings` value or default - losing the key ring would silently reinstate a
+  placeholder like `Agents:AuthToken = change-me` - and it must not be empty either, because an empty
+  `Security:ApiToken` means open mode and an empty `GitHub:WebhookSecret` skips signature validation. A number or
+  boolean row the binder cannot read is likewise replaced by its catalog default, since one unbindable value makes
+  every read of its options section throw. `SettingDefinition.Accepts` is the single rule validation, the seeder and
+  the mapper share.
 - **Shadowing a shorter list.** `ConfigurationRoot` unions the children of every provider, so a stored list that is
   shorter than the one in `appsettings` would still show the extra entries. `Program.cs` counts the children each list
   key already has in the lower layers and hands the counts to the source; the mapper then emits an explicit `null` for

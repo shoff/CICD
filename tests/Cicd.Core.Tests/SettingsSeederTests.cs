@@ -43,6 +43,17 @@ public class SettingsSeederTests
     }
 
     [Fact]
+    public void Empty_or_unparsable_typed_values_seed_their_catalog_default()
+    {
+        // An empty environment variable (Server__DispatchIntervalSeconds=) reads as "", not null.
+        var config = Config(("Server:DispatchIntervalSeconds", ""), ("IdentityProvider:TimeoutSeconds", "soon"), ("Agents:AutoAuthorize", "yes"));
+        var rows = SettingsSeeder.MissingRows(config, [], new ReversingProtector(), new TestClock());
+        Assert.Equal("2", rows.Single(r => r.Key == "Server:DispatchIntervalSeconds").Value);
+        Assert.Equal("15", rows.Single(r => r.Key == "IdentityProvider:TimeoutSeconds").Value);
+        Assert.Equal("false", rows.Single(r => r.Key == "Agents:AutoAuthorize").Value);
+    }
+
+    [Fact]
     public void Missing_configuration_seeds_an_empty_value_and_arrays_are_joined()
     {
         var config = Config(("Security:BootstrapAdmins:0", "a@x.com"), ("Security:BootstrapAdmins:1", "b@x.com"));

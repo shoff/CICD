@@ -42,4 +42,16 @@ public class GitHubWebhookTests
         var actions = await handler.HandleAsync(new WebhookRequest("github", new Dictionary<string, string> { ["X-GitHub-Event"] = "push", ["X-Hub-Signature-256"] = signature }, PushBody), CancellationToken.None);
         Assert.Single(actions);
     }
+
+    [Fact]
+    public async Task An_undecryptable_webhook_secret_rejects_unsigned_webhooks()
+    {
+        // Lost key ring: the stored secret cannot be read. That must not switch signature checking off.
+        var mapped = Cicd.Core.Settings.SettingsConfigurationMapper.ToConfiguration(
+            [new Cicd.Core.Entities.Setting { Key = "GitHub:WebhookSecret", Value = "enc:v1:garbage", IsSecret = true }], new ThrowingProtector());
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(mapped).Build();
+        var handler = new GitHubWebhookHandler(configuration, NullLogger<GitHubWebhookHandler>.Instance);
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            handler.HandleAsync(new WebhookRequest("github", new Dictionary<string, string> { ["X-GitHub-Event"] = "push" }, PushBody), CancellationToken.None));
+    }
 }

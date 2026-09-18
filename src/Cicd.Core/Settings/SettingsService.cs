@@ -197,15 +197,14 @@ public sealed class SettingsService(CicdDbContext db, ISecretProtector protector
                 continue;
             }
             var value = (raw ?? "").Trim();
-            switch (definition.Kind)
+            if (definition.Accepts(value))
             {
-                case SettingKind.Number when value.Length > 0 && (!int.TryParse(value, out var number) || number < 0):
-                    errors.Add($"{definition.DisplayName} must be a non-negative whole number.");
-                    break;
-                case SettingKind.Boolean when !bool.TryParse(value, out _):
-                    errors.Add($"{definition.DisplayName} must be true or false.");
-                    break;
+                continue;
             }
+            // An empty number is rejected like any other unreadable one: stored, it would break the binder.
+            errors.Add(definition.Kind == SettingKind.Number
+                ? $"{definition.DisplayName} must be a non-negative whole number."
+                : $"{definition.DisplayName} must be true or false.");
         }
         return errors;
     }
